@@ -5,6 +5,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { JSDOM } from 'jsdom';
+import { buildDocsDb } from '../scripts/build-docs-index.mjs';
+
+const CORE = buildDocsDb({ forms: [] });   // 법제처 민원서식 수집 여부와 무관하게 화면 동작을 시험한다
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -15,7 +18,7 @@ export function load(page, search = '', hash = '', store = {}) {
   const dom = new JSDOM(html, { url: 'https://law.hondi.net/' + page + search + hash, runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
   for (const [k, v] of Object.entries(store)) w.localStorage.setItem(k, JSON.stringify(v));
-  w.fetch = (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(read(u))) });
+  w.fetch = (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(u === 'data/docs.json' ? CORE : JSON.parse(read(u))) });
   w.Element.prototype.scrollIntoView = function () {};
   w.HTMLFormElement.prototype.requestSubmit = function () { this.dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true })); };
   w.eval(read('assets/docs-search.js'));
@@ -46,7 +49,7 @@ test('직역 구분 제거: 화면 어디에도 변호사/법무사 선택·표�
 
 test('질문 → 엔진: 서류 DB에서 찾으면 그 서류의 엔진, 아니면 질문 내용, 모르면 변호사 엔진(어느 쪽이든 모든 서류를 쓴다)', async () => {
   const w = load('write.html').window; await tick();
-  const db = JSON.parse(read('data/docs.json')), idx = w.NaviLawDocs.createIndex(db), pick = (t) => w.NaviLaw.pickEngine(idx, t);
+  const idx = w.NaviLawDocs.createIndex(CORE), pick = (t) => w.NaviLaw.pickEngine(idx, t);
   assert.equal(pick('근저당권 말소등기 신청서 작성'), 'judicial-scrivener');
   assert.equal(pick('개인회생'), 'judicial-scrivener');
   assert.equal(pick('변호인선임서'), 'lawyer');

@@ -1,7 +1,11 @@
 // 법제처 서식 수집 — 네트워크 없이 응답 모양과 수집 흐름을 시험한다
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractRows, normalizeRow, splitTitle, dedupe, buildUrl, collect, LawApiError } from '../scripts/law-forms-lib.mjs';
+import { extractRows, normalizeRow, splitTitle, dedupe, buildUrl, collect, groupByTitle, isGeneric, LawApiError } from '../scripts/law-forms-lib.mjs';
+import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { buildDocsDb } from '../scripts/build-docs-index.mjs';
 
 const row = (name, law, kind = '서식', dept = '농림축산식품부') => ({ 별표일련번호: '1', 관련법령명: law, 별표명: name, 별표종류: kind, 소관부처명: dept });
@@ -68,4 +72,29 @@ test('서류 DB: law-forms.json 이 있으면 "민원서식"으로 합치고, �
   const db = buildDocsDb();
   assert.ok(db.docs.length >= 399);
   assert.ok(db.docs.filter((d) => d.p !== 'minwon').length === 399);
+});
+
+test('일반 이름(신청서·증명서 등)은 버리고, 서식명이 같은 것은 법령을 3개까지만 남겨 합친다', () => {
+  assert.ok(isGeneric('신청서') && isGeneric('증명서') && isGeneric('위임장') && isGeneric('서식') && !isGeneric('농지취득자격증명신청서'));
+  const g = groupByTitle([
+    { t: '농지취득자격증명신청서', law: '농지법 시행규칙', kind: '서식', dept: '농림축산식품부', src: '법령' },
+    { t: '허가신청서', law: 'A법 시행규칙' }, { t: '신청서', law: 'B' },
+    { t: '영업신고서', law: '식품위생법 시행규칙' }, { t: '영업 신고서', law: '공중위생관리법 시행규칙' }, { t: '영업신고서', law: '체육시설법 시행규칙' }, { t: '영업신고서', law: '4번째법' }, { t: '영업신고서', law: '5번째법' },
+  ]);
+  assert.deepEqual(g.map((x) => x.t), ['농지취득자격증명신청서', '영업신고서']);
+  const y = g[1]; assert.equal(y.n, 5); assert.equal(y.laws.length, 3);
+});
+
+test('서류 DB: 합쳐진 민원서식은 "법령 외 N건"으로 표시되고, 검색에서는 같은 점수의 핵심 서류 뒤에 온다', () => {
+  const forms = [{ t: '농지취득자격증명신청서', no: '별지제3호서식', law: '농지법 시행규칙', laws: ['농지법 시행규칙'], n: 1, dept: '농림축산식품부', src: '법령' },
+                 { t: '영업신고서(식품)', law: '식품위생법 시행규칙', laws: ['식품위생법 시행규칙'], n: 3, dept: '식품의약품안전처', src: '법령' },
+                 { t: '소장 작성 안내', law: 'X', n: 1 }];
+  const db = buildDocsDb({ forms });
+  const m = db.docs.filter((d) => d.p === 'minwon');
+  assert.equal(m.length, 3); assert.equal(m[0].c, '농지법 시행규칙'); assert.equal(m[1].c, '식품위생법 시행규칙 외 2건'); assert.match(m[0].d, /별지제3호서식 · 농림축산식품부 · 법령/);
+  const ctx = {}; vm.runInNewContext(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../assets/docs-search.js'), 'utf8'), { window: ctx });
+  const idx = ctx.NaviLawDocs.createIndex(db), titles = (q) => ctx.NaviLawDocs.search(idx, q, { limit: 5 }).map((e) => e.t);
+  assert.equal(titles('농지취득자격')[0], '농지취득자격증명신청서', '목록에 없던 서류를 이제 찾는다');
+  assert.equal(titles('ㄴㅈㅊㄷㅈㄱ')[0], '농지취득자격증명신청서', '초성으로도');
+  assert.equal(titles('소장')[0], '소장', '같은 점수면 핵심 서류가 먼저');
 });

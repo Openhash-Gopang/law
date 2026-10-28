@@ -2,12 +2,12 @@
 //   준비: open.law.go.kr 마이페이지 > API인증키관리 에서 이 PC 의 공인 IP 를 등록한다(안 하면 빈 결과/거절).
 //   먼저 모양만 확인:  $env:LAW_OC="내OC"; node scripts/fetch-law-forms.mjs --diagnose
 //   수집:              $env:LAW_OC="내OC"; node scripts/fetch-law-forms.mjs
-//   옵션: --targets licbyl,admbyl,ordinbyl  --queries 신청서,신고서  --knd 2  --max 300  --delay 1200  --out data/law-forms.json
+//   옵션: --targets licbyl,admbyl,ordinbyl  --queries 신청서,신고서  --knd 2  --max 0(검색어마다 전부, 기본)  --delay 1200  --out data/law-forms.json
 // OC 는 요청 주소에 그대로 실린다 — 저장소에 올리지 말고 환경변수로만 쓴다.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { collect, buildUrl, extractRows, TARGETS } from './law-forms-lib.mjs';
+import { collect, buildUrl, extractRows, groupByTitle, TARGETS } from './law-forms-lib.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -19,7 +19,7 @@ const queries = opt('queries', '') ? opt('queries', '').split(',').map((s) => s.
 const knd = opt('knd', '2');
 
 if (args.includes('--diagnose')) {
-  // 한 번만 호출해 응답 모양을 저장·출력한다 — 모양이 다르면 이 파일(data/raw/diagnose.json)을 보내 주면 읽기 코드를 맞춘다.
+  // 한 번만 호출해 응답 모양을 저장·출력한다 — 모양이 다르면 이 파일(data/raw/diagnose.json)을 보내 주면 읽기 코드를 맞춘다. (파일에 OC 가 들어 있을 수 있으니 올리기 전에 지울 것)
   const url = buildUrl({ oc, target: targets[0] || 'licbyl', query: queries[0], knd, page: 1, display: 5 });
   const res = await fetch(url); const text = await res.text();
   mkdirSync(join(ROOT, 'data/raw'), { recursive: true });
@@ -27,11 +27,12 @@ if (args.includes('--diagnose')) {
   console.log('HTTP', res.status, '· 저장: data/raw/diagnose.json (' + text.length + '자)');
   try { const j = JSON.parse(text); const { rows, total } = extractRows(j); console.log('최상위 키:', Object.keys(j), '· 전체 건수:', total, '· 읽은 행:', rows.length); if (rows[0]) console.log('첫 행 키:', Object.keys(rows[0])); }
   catch { console.log('JSON 이 아닙니다. 앞부분:\n' + text.slice(0, 300)); }
-  process.exit(0);
+} else {
+  const maxArg = Number(opt('max', '0'));
+  const raw = await collect({ oc, targets, queries, knd, max: maxArg > 0 ? maxArg : Infinity, delay: Number(opt('delay', '1200')), log: (m) => console.log(m) });
+  const forms = groupByTitle(raw);
+  const out = join(ROOT, opt('out', 'data/law-forms.json'));
+  forms.sort((a, b) => a.t.localeCompare(b.t, 'ko'));
+  writeFileSync(out, JSON.stringify({ v: 1, source: '법제처 국가법령정보 Open API (별표·서식 목록)', forms }).replace(/\},\{/g, '},\n{') + '\n');
+  console.log('서식 ' + raw.length + '건 → 서식명 기준 ' + forms.length + '건 → ' + out + '\n다음: npm run build:docs');
 }
-
-const forms = await collect({ oc, targets, queries, knd, max: Number(opt('max', '300')), delay: Number(opt('delay', '1200')), log: (m) => console.log(m) });
-const out = join(ROOT, opt('out', 'data/law-forms.json'));
-forms.sort((a, b) => a.t.localeCompare(b.t, 'ko'));
-writeFileSync(out, JSON.stringify({ v: 1, source: '법제처 국가법령정보 Open API (별표·서식 목록)', forms }, null, 0).replace(/\},\{/g, '},\n{') + '\n');
-console.log('서식 ' + forms.length + '건 → ' + out + '\n다음: npm run build:docs');
