@@ -39,7 +39,7 @@ test('데이터: 법무사 12분류 98종, 변호사 8분류 61종·세부 분�
 });
 
 test('직역 구분 제거: 화면 어디에도 변호사/법무사 선택·표시가 없다', () => {
-  for (const p of ['docs.html', 'write.html']) assert.ok(!/변호사|법무사/.test(read(p).replace(/<footer[\s\S]*?<\/footer>/, '')), p);
+  for (const p of ['docs.html', 'write.html']) assert.ok(!/변호사|법무사/.test(read(p).replace(/<footer[\s\S]*?<\/footer>/, '').replace(/<aside class="promo"[\s\S]*?<\/aside>/, '')), p);
   const home = read('index.html').replace(/<meta[^>]*>/g, '');
   assert.ok(!/class="door|data-persona|변호사 보조|법무사 보조/.test(home));
   assert.ok(!/변호사|법무사/.test(read('assets/law.css')));
@@ -150,37 +150,58 @@ const PROMO_LINES = [
   '법원 API를 발급받으면, 법원 등 관련 기관과 부서에 서류 제출까지 나비로가 진행합니다.',
   '금융 기관과 협력하면, 각종 수수료와 인지대 납부도 처리합니다.',
   '분쟁이 발생하면, 법원의 예상 판결문을 상당한 신뢰도로 생성하므로, 불필요한 소송 남발을 막습니다.',
+  'L모사 등 여타 법률 AI 서비스가 제공하는 모든 기능을 제공하고, 이들이 결코 제공할 수 없는 기능을 제공합니다.',
+  '의뢰인이 직접 작성하고, 변호사·법무사가 승인하는 구조이며, 의뢰인은 이름·주소 등을 일일이 입력할 필요가 없습니다.',
+  '의뢰인이나 사무 직원이 어떤 서류를 작성하다 막히면, AI 비서가 친절히 안내나 설명해 줍니다(관제탑 원칙).',
 ];
 
-test('배너: 홈·서류 목록에만 "나비로의 특징" 네 줄이 있고, 작성 화면에는 없다', () => {
+test('특징 패널: 홈·서류 목록에만 있고, 일곱 줄과 "관제탑 원칙" 단추가 있으며 작성 화면에는 없다', () => {
   for (const p of ['index.html', 'docs.html']) {
     const w = load(p).window, el = w.document.getElementById('promo');
     assert.ok(el, p);
     assert.equal(el.querySelector('h2').textContent, '나비로의 특징');
-    assert.deepEqual([...el.querySelectorAll('ol > li')].map((l) => l.textContent), PROMO_LINES);
-    assert.match(el.querySelector('.promo-close').textContent, /다시 보지 않기/);
-    assert.ok(el.querySelector('.promo-close svg'), '닫기 표시(X)');
+    const lis = [...el.querySelectorAll('ol > li')].map((l) => { const c = l.cloneNode(true); const t = c.querySelector('.tower-tip'); if (t) t.remove(); return c.textContent; });
+    assert.deepEqual(lis, PROMO_LINES);
     assert.match(el.querySelector('.promo-note').textContent, /예상 판결문은 참고용이며 법적 효력이 없습니다/);
+    assert.ok(w.document.getElementById('promoTab'), '옆면 손잡이');
+    assert.ok(el.querySelector('#towerBtn svg'), '화살표');
   }
-  for (const p of ['write.html', '404.html']) assert.equal(load(p).window.document.getElementById('promo'), null, p);
+  for (const p of ['write.html', '404.html']) { const d = load(p).window.document; assert.equal(d.getElementById('promo'), null, p); assert.equal(d.getElementById('promoTab'), null, p); }
 });
 
-test('배너: 다시 보지 않기를 누르면 닫히고 기억하며, 기억한 브라우저에는 다시 나오지 않는다', () => {
-  const w = load('index.html').window;
-  w.document.getElementById('promoClose').click();
-  assert.equal(w.document.getElementById('promo'), null);
-  assert.equal(w.document.querySelector('.promo-wrap'), null, '빈 띠가 남지 않는다');
+test('특징 패널: 손잡이로 밀어 열고 닫으며, 처음 온 사람에게는 저절로 열린다', async () => {
+  const w = load('index.html').window, d = w.document, el = d.getElementById('promo'), tab = d.getElementById('promoTab');
+  assert.ok(!el.classList.contains('open')); assert.equal(el.getAttribute('aria-hidden'), 'true');
+  tab.click(); assert.ok(el.classList.contains('open')); assert.equal(el.getAttribute('aria-hidden'), 'false'); assert.equal(tab.getAttribute('aria-expanded'), 'true');
+  d.getElementById('promoX').click(); assert.ok(!el.classList.contains('open'));
+  tab.click(); d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); assert.ok(!el.classList.contains('open'), 'Esc 로 닫는다');
+  const f = load('docs.html').window; await new Promise((r) => setTimeout(r, 450));
+  assert.ok(f.document.getElementById('promo').classList.contains('open'), '처음 온 사람에게는 열려 있다');
+  const g = load('docs.html', '', '', { navilaw_promo_v1: 1 }).window; await new Promise((r) => setTimeout(r, 450));
+  assert.ok(!g.document.getElementById('promo').classList.contains('open'), '다시 보지 않기를 누른 사람에게는 저절로 열리지 않는다');
+  assert.ok(g.document.getElementById('promoTab'), '손잡이는 남는다');
+});
+
+test('특징 패널: 다시 보지 않기는 닫고 기억한다', () => {
+  const w = load('index.html').window, d = w.document;
+  d.getElementById('promoTab').click(); d.getElementById('promoClose').click();
+  assert.ok(!d.getElementById('promo').classList.contains('open'));
   assert.equal(w.localStorage.getItem('navilaw_promo_v1'), '1');
-  assert.equal(load('docs.html', '', '', { navilaw_promo_v1: 1 }).window.document.getElementById('promo'), null);
-  assert.equal(load('index.html', '', '', {}).window.document.getElementById('promo') !== null, true, '기억이 없으면 보인다');
 });
 
-test('배너: 접근성(제목 연결·키보드로 닫기 버튼)과 인쇄 숨김', () => {
-  const w = load('index.html').window, el = w.document.getElementById('promo');
+test('특징 패널: "관제탑 원칙"을 누르면 쪽지가 나타나고 다시 누르면 접힌다', () => {
+  const w = load('index.html').window, d = w.document, b = d.getElementById('towerBtn'), tip = d.getElementById('towerTip');
+  assert.equal(tip.hidden, true); assert.equal(b.getAttribute('aria-expanded'), 'false'); assert.equal(b.getAttribute('aria-controls'), 'towerTip');
+  b.click(); assert.equal(tip.hidden, false); assert.equal(b.getAttribute('aria-expanded'), 'true');
+  assert.match(tip.textContent, /비행사가 갑자기 사망하여 조종간을 잡게 된 승객에게, 관제탑이 안전한 착륙을 위해 한 번에 하나씩 지시하는 것/);
+  b.click(); assert.equal(tip.hidden, true);
+});
+
+test('특징 패널: 접근성(제목 연결·단추)과 인쇄 숨김', () => {
+  const d = load('index.html').window.document, el = d.getElementById('promo');
   assert.equal(el.getAttribute('aria-labelledby'), 'promoH');
-  const b = w.document.getElementById('promoClose');
-  assert.equal(b.tagName, 'BUTTON'); assert.ok(b.getAttribute('aria-label'));
-  assert.match(read('assets/law.css'), /@media print \{ \.promo-wrap \{ display: none/);
+  for (const id of ['promoTab', 'promoX', 'promoClose', 'towerBtn']) assert.equal(d.getElementById(id).tagName, 'BUTTON', id);
+  assert.match(read('assets/law.css'), /@media print \{ \.promo, \.promo-tab \{ display: none/);
 });
 
 // ── 발급 서류: 초안이 아니라 발급 안내로 시작한다 ──

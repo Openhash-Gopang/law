@@ -593,11 +593,22 @@
   /* ── 나비로의 특징 배너 — "다시 보지 않기"를 누르면 이 브라우저에서 다시 나오지 않는다(문구를 바꾸면 키의 버전을 올려 다시 보이게 한다). ── */
   var PROMO_KEY = 'navilaw_promo_v1';
   function initPromo() {
-    var el = $('promo'); if (!el) return;
-    var box = el.parentNode && el.parentNode.className === 'promo-wrap' ? el.parentNode : el;
-    try { if (localStorage.getItem(PROMO_KEY) === '1') { box.remove(); return; } } catch (e) { /* 저장을 못 하면 그냥 보인다 */ }
-    var b = $('promoClose');
-    if (b) b.addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } box.remove(); });
+    var el = $('promo'), tab = $('promoTab'); if (!el || !tab) return;
+    var seen = false;
+    try { seen = localStorage.getItem(PROMO_KEY) === '1'; } catch (e) { /* 저장을 못 하면 처음 온 것으로 본다 */ }
+    function setOpen(open, focus) {
+      el.classList.toggle('open', open);
+      el.setAttribute('aria-hidden', open ? 'false' : 'true');
+      tab.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (focus) { try { (open ? $('promoX') : tab).focus(); } catch (e) { /* 무시 */ } }
+    }
+    tab.addEventListener('click', function () { setOpen(true, true); });
+    $('promoX').addEventListener('click', function () { setOpen(false, true); });
+    $('promoClose').addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } setOpen(false, true); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && el.classList.contains('open')) setOpen(false, true); });
+    var tb = $('towerBtn'), tip = $('towerTip');
+    if (tb && tip) tb.addEventListener('click', function () { var o = tip.hidden; tip.hidden = !o; tb.setAttribute('aria-expanded', o ? 'true' : 'false'); });
+    if (!seen) setTimeout(function () { setOpen(true, false); }, 350);   // 처음 오신 분께는 한 번 밀어서 보여 드린다
   }
 
   /* 나만의 AI 비서(hondi.net)가 ?gwp=1&origin=… 로 연 창이면 그 출처를 기억한다 — 이후 다른 쪽으로 이동해도 window.opener 로 비서와 이야기할 수 있다. */
