@@ -399,8 +399,13 @@
       if (alt) { input.value = alt.getAttribute('data-alt'); showPrev(); form.requestSubmit(); }   // 추천 서류를 고르면 바로 이 화면에서 작성
       else if (go && cur) window.NaviLaw.go(writeUrl(curPid, { doc: cur }));
     });
+    /* 홈 맨 위: 오늘 날짜 기준으로 작성할 수 있는 서류 수(발급받아 첨부하는 서류는 뺀다). */
+    function showCount(d) {
+      var el = $('docCount'), n = ((d && d.docs) || []).filter(function (x) { return x.p !== 'issued'; }).length, t = new Date();
+      if (el && n) el.textContent = t.getFullYear() + '년 ' + (t.getMonth() + 1) + '월 ' + t.getDate() + '일 현재, ' + n.toLocaleString('en-US') + '건의 민원 & 법원 서류를 작성합니다.';
+    }
     fetch('data/docs.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (d) { db = d; index = window.NaviLawDocs.createIndex(d); if (input.value.trim()) showPrev(); }).catch(function () { /* 목록이 없어도 입력한 말로 미리보기는 나온다 */ });
+      .then(function (d) { db = d; showCount(d); index = window.NaviLawDocs.createIndex(d); if (input.value.trim()) showPrev(); }).catch(function () { /* 목록이 없어도 입력한 말로 미리보기는 나온다 */ });
   }
 
   /* ══════════ 서류 목록 (직역 구분 없이 한 목록) ══════════ */

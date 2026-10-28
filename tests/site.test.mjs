@@ -524,3 +524,9 @@ test('홈: AI 초안이 오면 같은 화면에 입력 칸으로 펼치고 PDV �
   assert.ok(w.document.querySelector('#docPrevIn [data-act="download"]'));
   assert.equal(w.document.querySelector('#docPrevIn .dp-rest'), null, '찌꺼기뿐인 안내는 보이지 않는다');
 });
+
+test('홈: 맨 위에 오늘 날짜 기준 작성 가능 서류 수를 보여 준다(발급 서류 제외)', async () => {
+  const w = load('index.html', '', '', {}, WITH_ISSUED).window; await tick(); await tick();
+  const el = w.document.getElementById('docCount'), n = WITH_ISSUED.docs.filter((x) => x.p !== 'issued').length, d = new Date();
+  assert.equal(el.textContent, d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 현재, ' + n.toLocaleString('en-US') + '건의 민원 & 법원 서류를 작성합니다.');
+});
