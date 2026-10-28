@@ -394,9 +394,9 @@
       return '「' + doc + '」 초안을 작성해 주세요.' + (memo ? ' 알고 있는 내용: ' + memo + '.' : '') + tail;
     }
     function begin(doc, memo, q) {
-      var it = !q && doc && window.NaviLawDocs.findIssued ? window.NaviLawDocs.findIssued(docsDb, doc) : null;   // 받아서 첨부하는 서류는 초안이 아니라 발급 안내로 시작한다
+      var N = window.NaviLawDocs, it = !q && doc && N.findIssued ? N.findIssued(docsDb, doc) : (q && N.findIssuedAsk ? N.findIssuedAsk(docsDb, q) : null);   // 받아서 첨부하는 서류는 초안이 아니라 발급 안내로 시작한다 — 서류명만 고른 경우와 "…떼는 법" 같은 발급 문의 문장
       st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '' };
-      save(); render(); send(it ? window.NaviLawDocs.issuedAsk(it, memo) : startMessage(doc, memo, q));
+      save(); render(); send(it ? N.issuedAsk(it, memo, q) : startMessage(doc, memo, q));
     }
 
     function bind() {

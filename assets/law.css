@@ -173,7 +173,7 @@ details.fold > div { padding: 0 18px 16px; font-size: 16px; color: var(--sub); }
 .sug { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 60; margin: 0; padding: 4px 0; list-style: none; background: #fff; border: 1px solid #94a3b8; border-radius: 8px; box-shadow: 0 10px 28px rgba(15, 23, 42, .18); max-height: min(60vh, 460px); overflow-y: auto; }
 .sug li { padding: 10px 16px; min-height: 48px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .sug li[aria-selected="true"], .sug li:hover { background: var(--blue-bg); }
-.sug-t { font-size: 17.5px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.sug-t { font-size: 17.5px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }   /* 긴 서식명은 두 줄까지 */
 .sug-t mark { background: #fde68a; color: inherit; border-radius: 2px; padding: 0 1px; }
 .sug-m { font-size: 14.5px; color: var(--sub); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .sug-free { border-top: 1px solid var(--line); }

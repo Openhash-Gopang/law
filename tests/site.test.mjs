@@ -27,12 +27,12 @@ export function load(page, search = '', hash = '', store = {}, db = CORE) {
 }
 const tick = () => new Promise((r) => setTimeout(r, 40));
 
-test('데이터: 법무사 12분류 98종, 변호사 4분류 19종·세부 분야 46개', () => {
+test('데이터: 법무사 12분류 98종, 변호사 8분류 61종·세부 분야 46개', () => {
   const s = JSON.parse(read('data/scrivener.json')), l = JSON.parse(read('data/lawyer.json'));
   assert.equal(s.catalog.length, 12);
   assert.equal(s.catalog.reduce((n, c) => n + c.items.length, 0), 98);
-  assert.equal(l.catalog.length, 4);
-  assert.equal(l.catalog.reduce((n, c) => n + c.items.length, 0), 19);
+  assert.equal(l.catalog.length, 8);
+  assert.equal(l.catalog.reduce((n, c) => n + c.items.length, 0), 61);
   assert.equal(l.fields.length, 46);
   for (const f of l.fields) assert.ok(/^lawyer-[a-z-]+$/.test(f.id) && f.forms.length >= 5, f.id);
 });
@@ -67,10 +67,10 @@ test('홈: 입력하면 질문 그대로 작성 화면으로 간다(직역 선�
   assert.equal(w.document.querySelectorAll('.door').length, 0);
 });
 
-test('서류 목록: 16개 분류 117종이 한 목록, 서류마다 초안 작성 링크, 분야 12개 + 전체 보기', async () => {
+test('서류 목록: 20개 분류 159종이 한 목록, 서류마다 초안 작성 링크, 분야 12개 + 전체 보기', async () => {
   const w = load('docs.html').window; await tick();
-  assert.equal(w.document.querySelectorAll('#tabs .tab').length, 16);
-  assert.match(w.document.getElementById('countLine').textContent, /16개 분류, 117종/);
+  assert.equal(w.document.querySelectorAll('#tabs .tab').length, 20);
+  assert.match(w.document.getElementById('countLine').textContent, /20개 분류, 159종/);
   assert.ok(w.document.querySelector('#listBox .item a.btn').getAttribute('href').startsWith('write.html?persona=judicial-scrivener&doc='));
   const tabs = [...w.document.querySelectorAll('#tabs .tab')]; tabs[12].click();
   assert.ok(w.document.querySelector('#listBox .item a.btn').getAttribute('href').startsWith('write.html?persona=lawyer&doc='));
@@ -145,7 +145,7 @@ test('모든 HTML의 로컬 링크·스크립트가 실제 파일을 가리킨�
 });
 
 const PROMO_LINES = [
-  '12,000여 건의 민원 및 법원 서류를 말 한 마디로 작성합니다.',
+  '11,000여 건의 민원 및 법원 서류를 말 한 마디로 작성합니다.',
   '법원 API를 발급받으면, 법원 등 관련 기관과 부서에 서류 제출까지 나비로가 진행합니다.',
   '금융 기관과 협력하면, 각종 수수료와 인지대 납부도 처리합니다.',
   '분쟁이 발생하면, 법원의 예상 판결문을 상당한 신뢰도로 생성하므로, 불필요한 소송 남발을 막습니다.',
@@ -220,6 +220,17 @@ test('작성 화면: 작성하는 서류와 문장 속 서류명은 그대로 �
   w = load('write.html', '?persona=lawyer&q=' + encodeURIComponent('가족관계증명서를 붙인 소장 작성'), '', {}, WITH_ISSUED).window; await tick();
   h = hook(w); h.fire({ type: 'expert-embed-ready' }); await tick();
   assert.match(h.sent[0][0].text, /초안을 작성해 주세요/); assert.doesNotMatch(h.sent[0][0].text, /발급받아 첨부하는 서류/);
+});
+
+test('작성 화면: 발급을 묻는 문장(주민등록등본 떼는 법)은 초안이 아니라 발급 안내로 시작하고, 서류명이 든 초안 요청은 그대로 초안이다', async () => {
+  let w = load('write.html', '?q=' + encodeURIComponent('주민등록등본 떼는 법'), '', {}, WITH_ISSUED).window; await tick();
+  let h = hook(w); h.fire({ type: 'expert-embed-ready' }); await tick();
+  assert.match(h.sent[0][0].text, /^「주민등록등본」은\(는\) 작성하는 서류가 아니라 발급받아 첨부하는 서류입니다/);
+  assert.match(h.sent[0][0].text, /사용자의 원래 요청: 「주민등록등본 떼는 법」/);
+  assert.equal(w.document.getElementById('draftTitle').textContent, '발급 안내');
+  w = load('write.html', '?q=' + encodeURIComponent('주민등록등본을 첨부하는 위임장 초안 써줘'), '', {}, WITH_ISSUED).window; await tick();
+  h = hook(w); h.fire({ type: 'expert-embed-ready' }); await tick();
+  assert.match(h.sent[0][0].text, /초안을 작성해 주세요/); assert.equal(w.document.getElementById('draftTitle').textContent, '초안');
 });
 
 test('작성 화면: 직접 입력한 서류명이 발급 서류와 같아도 발급 안내로 시작하고, 이어쓰기는 발급 안내 상태로 돌아간다', async () => {
