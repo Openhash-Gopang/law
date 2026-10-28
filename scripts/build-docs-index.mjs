@@ -24,6 +24,13 @@ export function buildDocsDb() {
   for (const c of scr.catalog) for (const it of c.items) push('scrivener', 'judicial-scrivener', c.tab, it.t, it.d);
   for (const c of law.catalog) for (const it of c.items) push('lawyer', 'lawyer', c.tab, it.t, it.d);
   for (const f of law.fields) for (const it of f.forms) push('lawyer', f.id, f.name, it.t, it.d);
+  // 법제처 별표·서식(민원서식) — data/law-forms.json 이 있을 때만 합친다(scripts/fetch-law-forms.mjs 가 만든다).
+  let extra = []; try { extra = read('data/law-forms.json').forms || []; } catch { /* 아직 수집 전 */ }
+  for (const f of extra) {
+    const row = { t: f.t, p: 'minwon', pid: 'lawyer', c: f.law || '민원서식', d: [f.no, f.dept, f.src].filter(Boolean).join(' · ') };
+    const a = aliasFor(f.t); if (a.length) row.a = a;
+    docs.push(row);
+  }
   const fields = law.fields.map((f) => ({ id: f.id, name: f.name, scope: f.scope || '' }));
   return { v: 1, docs, fields };
 }
