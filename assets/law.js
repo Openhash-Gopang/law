@@ -309,10 +309,15 @@
       prevIn.innerHTML = '<div class="dp-card"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" role="alert">' + esc(msg) + '</p><div class="dp-foot"><button type="button" class="btn" data-go="1">작성 화면에서 하기</button></div></div>';
       prev.classList.add('open');
     }
+    /* 초안 밖의 AI 말에서 코드 울타리 줄·짧은 제목 줄만 남은 찌꺼기는 버린다. 쓸 만한 안내(빈 칸 표 등)가 있을 때만 보인다. */
+    function restOf(r) {
+      var t = String(r || '').replace(/^[ \t]*(?:~{3,}|`{3,})[^\n]*$/gm, '').replace(/^[^\n]{0,40}초안[ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+      return t.replace(/[\s·\-|:]/g, '').length >= 12 ? t : '';
+    }
     function genDraw() {
-      var fs = genFields();
+      var fs = genFields(), restText = restOf(gen.rest);
       prevIn.innerHTML = '<div class="dp-card dp-draft"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" id="gSum" role="status"></p><div class="draft dp-body">' + fieldsHtml(gen.md, fs, gen.vals, gen.pdv) + '</div>' +
-        (gen.rest ? '<details class="dp-rest"><summary>AI의 안내·남은 빈 칸</summary><div class="draft">' + mdToHtml(gen.rest) + '</div></details>' : '') +
+        (restText ? '<details class="dp-rest"><summary>AI의 안내·남은 빈 칸</summary><div class="draft">' + mdToHtml(restText) + '</div></details>' : '') +
         '<div class="dp-foot"><button type="button" class="btn" data-act="download">웹 표준 서식으로 내려받기</button><button type="button" class="btn line" data-act="copy">복사</button><button type="button" class="btn line" data-act="continue">작성 화면에서 이어서 고치기</button><span class="dp-note">의뢰인 정보는 PDV에서 채워졌습니다. 변호사·법무사가 승인합니다.</span></div></div>';
       genSummary(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
     }
