@@ -51,6 +51,23 @@ export function normalizeRow(r, target) {
 const key = (f) => (f.t + '|' + f.law).replace(/\s+/g, '').toLowerCase();
 export function dedupe(list) { const seen = new Set(), out = []; for (const f of list) { const k = key(f); if (seen.has(k)) continue; seen.add(k); out.push(f); } return out; }
 
+// "신청서"·"증명서"처럼 이름만으로는 어떤 서류인지 알 수 없는 것은 버린다(핵심 서류 목록에 이미 있거나 법령마다 뜻이 다르다).
+const GENERIC = new Set(['신청서', '신고서', '확인서', '청구서', '증명서', '증명원', '허가신청서', '등록신청서', '변경신고서', '신청', '신고', '허가', '등록', '서식', '위임장', '동의서', '별지서식', '확인원', '통지서', '결과서']);
+export const isGeneric = (t) => { const n = String(t || '').replace(/\s+/g, ''); return n.length < 4 || GENERIC.has(n); };
+
+/** 서식명이 같은 것은 한 건으로 합친다(법령명은 앞의 3개만 남기고 개수를 센다). 법령마다 같은 이름의 서식이 많아 자동 완성이 같은 이름으로 가득 차는 것을 막는다. */
+export function groupByTitle(list) {
+  const map = new Map();
+  for (const f of list) {
+    if (isGeneric(f.t)) continue;
+    const k = f.t.replace(/\s+/g, '').toLowerCase();
+    const g = map.get(k);
+    if (!g) { map.set(k, { t: f.t, no: f.no || '', law: f.law, laws: f.law ? [f.law] : [], n: 1, kind: f.kind, dept: f.dept, src: f.src }); continue; }
+    g.n += 1; if (f.law && g.laws.length < 3 && !g.laws.includes(f.law)) g.laws.push(f.law);
+  }
+  return [...map.values()];
+}
+
 export function buildUrl({ oc, target, query, knd, page, display = 100 }) {
   const p = new URLSearchParams({ OC: oc, target, type: 'JSON', search: '1', query, display: String(display), page: String(page) });
   if (knd) p.set('knd', knd);

@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => JSON.parse(readFileSync(join(ROOT, p), 'utf8'));
 
-export function buildDocsDb() {
+export function buildDocsDb(opts = {}) {
   const scr = read('data/scrivener.json'), law = read('data/lawyer.json'), aliases = read('data/docs-aliases.json');
   const docs = [];
   const aliasFor = (t) => {
@@ -25,9 +25,10 @@ export function buildDocsDb() {
   for (const c of law.catalog) for (const it of c.items) push('lawyer', 'lawyer', c.tab, it.t, it.d);
   for (const f of law.fields) for (const it of f.forms) push('lawyer', f.id, f.name, it.t, it.d);
   // 법제처 별표·서식(민원서식) — data/law-forms.json 이 있을 때만 합친다(scripts/fetch-law-forms.mjs 가 만든다).
-  let extra = []; try { extra = read('data/law-forms.json').forms || []; } catch { /* 아직 수집 전 */ }
+  let extra = opts.forms; if (!extra) { try { extra = read('data/law-forms.json').forms || []; } catch { extra = []; /* 아직 수집 전 */ } }
   for (const f of extra) {
-    const row = { t: f.t, p: 'minwon', pid: 'lawyer', c: f.law || '민원서식', d: [f.no, f.dept, f.src].filter(Boolean).join(' · ') };
+    const more = f.n > 1 && f.law ? f.law + ' 외 ' + (f.n - 1) + '건' : (f.law || '민원서식');
+    const row = { t: f.t, p: 'minwon', pid: 'lawyer', c: more, d: [f.no, f.dept, f.src].filter(Boolean).join(' · ') };
     const a = aliasFor(f.t); if (a.length) row.a = a;
     docs.push(row);
   }
