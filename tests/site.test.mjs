@@ -471,7 +471,7 @@ test('"대법원 판결문 예상" 손잡이: "나비로의 특징" 위에 있�
   for (const p of ['index.html', 'docs.html', 'mydocs.html']) {
     const d = load(p).window.document, tabs = Array.from(d.querySelectorAll('.side-tabs > *')), v = d.getElementById('verdictTab');
     assert.ok(v, p); assert.equal(v.textContent, '대법원 판결문 예상');
-    assert.equal(v.getAttribute('href'), 'https://klaw.hondi.net/verdict-generate.html');
+    assert.equal(v.getAttribute('href'), 'https://klaw.hondi.net/virtual-verdict.html');
     assert.equal(v.getAttribute('target'), '_blank'); assert.match(v.getAttribute('rel'), /noopener/);
     assert.ok(tabs.indexOf(v) < tabs.indexOf(d.getElementById('promoTab')), p + ': 특징 손잡이보다 위');
   }
@@ -489,4 +489,11 @@ test('패널 바깥을 누르면 밀어 넣는다: 특징 패널·대화창(홈�
   const { w: ww } = await openForm(); const dd = ww.document, p2 = dd.getElementById('chatPanel');
   dd.getElementById('chatFab').click(); assert.ok(p2.classList.contains('open'));
   dd.getElementById('draft').dispatchEvent(new ww.MouseEvent('click', { bubbles: true })); assert.ok(!p2.classList.contains('open'), '작성 화면의 대화창도 닫힌다');
+});
+
+test('바닥글: 보조 도구 고지 문구는 없고 링크만 남는다(고지는 변호사·법무사 등록 시점에)', () => {
+  for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html']) {
+    const f = read(p).match(/<footer[\s\S]*?<\/footer>/)[0];
+    assert.doesNotMatch(f, /법률 자문이나 대리를 제공하지/, p); assert.match(f, /혼디넷/, p);
+  }
 });
