@@ -1,0 +1,367 @@
+/* 나비로 Navi Law — 페이지 스크립트 (law.hondi.net)
+   body[data-page] = home | list | write.
+   AI 대화는 hondi.net 의 전문가 대화 화면(expert-chat.html?embed=1)을 iframe 으로 끼워 쓴다.
+   (서식 DB 태그·SP 결합·로그인·과금은 그 화면이 맡는다. 이 사이트는 화면과 진행 표시만 맡는다.)
+   부모 → 대화창 {type:'expert-embed-send', text} / 대화창 → 부모 {type:'expert-embed-ready'} · {type:'expert-embed-reply', text}. */
+(function () {
+  'use strict';
+  var HONDI = 'https://hondi.net';
+  var BT = String.fromCharCode(96);
+  var qs = new URLSearchParams(location.search);
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function enc(s) { return encodeURIComponent(s); }
+  function toast(msg) {
+    var t = $('toast'); if (!t) return;
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove('show'); }, 3200);
+  }
+  function storeGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function storeSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 저장은 편의 기능 */ } }
+
+  var PERSONA = {
+    scrivener: { id: 'judicial-scrivener', label: '법무사 보조 AI', role: '법무사', page: 'scrivener.html', data: 'data/scrivener.json', docHint: '예: 소유권이전등기신청서(매매)' },
+    lawyer: { id: 'lawyer', label: '변호사 보조 AI', role: '변호사', page: 'lawyer.html', data: 'data/lawyer.json', docHint: '예: 답변서, 준비서면' }
+  };
+
+  function writeUrl(personaId, p) {
+    var u = 'write.html?persona=' + enc(personaId);
+    Object.keys(p || {}).forEach(function (k) { if (p[k]) u += '&' + k + '=' + enc(p[k]); });
+    return u;
+  }
+
+  /* ── 질문 → 어느 쪽인가 ──
+     확실할 때만 바로 연결한다. 소장·답변서처럼 양쪽이 다 쓰는 말이나 판단이 어려운 말은 문 두 개를 다시 보여 준다. */
+  var SCR_WORDS = /등기|공탁|경매|공매|입찰|개인회생|개인파산|파산|면책|독촉|지급명령|가압류|가처분|압류|추심명령|전부명령|법무사|소액|소유권|근저당|말소|법인설립|임원변경|본점이전|채권자목록|변제계획|재산분할협의/;
+  var LAW_WORDS = /고소|고발|변호|의견서|내용증명|계약서|합의서|변론|항소|상고|항고|구속|보석|손해배상|이혼|행정심판|헌법소원|자문/;
+  function route(text) {
+    var s = SCR_WORDS.test(text), l = LAW_WORDS.test(text);
+    if (s && !l) return 'scrivener';
+    if (l && !s) return 'lawyer';
+    return '';
+  }
+
+  /* ══════════ 홈 ══════════ */
+  function initHome() {
+    var form = $('askForm'), input = $('askInput'), hint = $('routeHint');
+    var doors = Array.prototype.slice.call(document.querySelectorAll('.door'));
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var t = input.value.trim();
+      if (!t) { input.focus(); return; }
+      var r = route(t);
+      if (r) { location.href = writeUrl(PERSONA[r].id, { q: t }); return; }
+      hint.hidden = false;
+      doors.forEach(function (d) {
+        d.classList.add('pick');
+        var a = d.querySelector('a.btn'), k = d.getAttribute('data-persona');
+        a.href = writeUrl(PERSONA[k].id, { q: t });
+        a.textContent = '이 내용으로 ' + PERSONA[k].label + ' 열기';
+      });
+      hint.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.chip[data-q]'), function (c) {
+      c.addEventListener('click', function () { input.value = c.getAttribute('data-q'); form.requestSubmit(); });
+    });
+  }
+
+  /* ══════════ 서류 목록 (법무사·변호사 같은 틀) ══════════ */
+  function initList() {
+    var key = document.body.getAttribute('data-persona'), P = PERSONA[key];
+    var DATA = null, personaId = P.id, activeCat = null, showAll = false;
+
+    $('askForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var t = $('askInput').value.trim();
+      if (!t) { $('askInput').focus(); return; }
+      location.href = writeUrl(personaId, { q: t });
+    });
+
+    fetch(P.data).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) {
+      DATA = d;
+      if (key === 'lawyer') {
+        var fid = qs.get('field');
+        var f = fid && d.fields.filter(function (x) { return x.id === fid; })[0];
+        if (f) personaId = f.id;
+        renderFields(f || null);
+      }
+      var h = (location.hash || '').replace('#', '');
+      activeCat = (d.catalog.filter(function (c) { return c.id === h; })[0] || d.catalog[0]).id;
+      renderTabs(); renderCat();
+      $('askForm').querySelector('input').placeholder = '작성할 서류를 말씀하십시오';
+    }).catch(function () {
+      $('listBox').innerHTML = '<div class="empty">서류 목록을 불러오지 못했습니다. 새로 고침해 주세요. 목록 없이도 위 입력창으로 바로 시작할 수 있습니다.</div>';
+    });
+
+    function docLink(title) { return writeUrl(personaId, { doc: title }); }
+
+    function renderTabs() {
+      $('tabs').innerHTML = DATA.catalog.map(function (c) {
+        return '<button type="button" class="tab" role="tab" data-id="' + esc(c.id) + '" aria-selected="' + (c.id === activeCat) + '">' + esc(c.tab) + '</button>';
+      }).join('');
+      Array.prototype.forEach.call($('tabs').querySelectorAll('.tab'), function (b) {
+        b.addEventListener('click', function () { activeCat = b.getAttribute('data-id'); renderTabs(); renderCat(); try { history.replaceState(null, '', '#' + activeCat); } catch (e) { /* 무시 */ } });
+      });
+    }
+    function renderCat() {
+      var c = DATA.catalog.filter(function (x) { return x.id === activeCat; })[0]; if (!c) return;
+      var h = '';
+      if (c.lead) h += '<div class="lead-box">' + esc(c.lead) + '</div>';
+      h += '<div class="list">' + c.items.map(function (it) {
+        return '<div class="item"><b>' + esc(it.t) + '</b><small>' + esc(it.d) + '</small>' +
+          '<a class="btn sm" href="' + docLink(it.t) + '">초안 작성</a></div>';
+      }).join('') + '</div>';
+      if (c.meta) h += '<p class="meta-line">' + esc(c.meta) + '</p>';
+      $('listBox').innerHTML = h;
+      $('countLine').textContent = DATA.catalog.length + '개 분류, ' + DATA.catalog.reduce(function (n, x) { return n + x.items.length; }, 0) + '종';
+    }
+
+    /* 변호사 — 세부 분야 46개 */
+    function renderFields(cur) {
+      var box = $('fieldsBox'); if (!box) return;
+      var fs = DATA.fields, head = '';
+      var vis = showAll || cur ? fs : fs.slice(0, 12);
+      var h = '<div class="fields">' + vis.map(function (f) {
+        return '<a class="field" href="lawyer.html?field=' + enc(f.id) + '"' + (cur && cur.id === f.id ? ' aria-current="true"' : '') + '>' + esc(f.name) + '</a>';
+      }).join('') + '</div>';
+      if (!cur) h += '<button type="button" class="more" id="moreBtn">' + (showAll ? '자주 찾는 분야만 보기' : '전체 ' + fs.length + '개 분야 보기') + '</button>';
+      box.innerHTML = h;
+      var mb = $('moreBtn'); if (mb) mb.onclick = function () { showAll = !showAll; renderFields(null); };
+      var fb = $('fieldDetail');
+      if (!cur) { fb.innerHTML = ''; return; }
+      var d = '<div class="field-head"><h2>' + esc(cur.name) + '</h2>' + (cur.scope ? '<p class="small" style="margin:0">' + esc(cur.scope) + '</p>' : '') +
+        '<p style="margin:10px 0 0"><a href="lawyer.html" class="small">분야 선택 해제</a></p></div>';
+      if (cur.forms.length) {
+        d += '<div class="table-wrap"><table><thead><tr><th>서류</th><th>제출처 · 시기</th><th>핵심 기재 · 첨부</th><th></th></tr></thead><tbody>' +
+          cur.forms.map(function (f) { return '<tr><td><b>' + esc(f.t) + '</b></td><td>' + esc(f.when) + '</td><td>' + esc(f.d) + '</td><td><a class="btn sm" href="' + docLink(f.t) + '">초안 작성</a></td></tr>'; }).join('') +
+          '</tbody></table></div>';
+      }
+      if (cur.deadlines.length) {
+        d += '<details class="fold"><summary>기한 참고 (조문·법원 공고로 확인 필요)</summary><div><div class="table-wrap" style="margin:0"><table><thead><tr><th>기한</th><th>통상 길이 · 기산</th></tr></thead><tbody>' +
+          cur.deadlines.map(function (x) { return '<tr><td>' + esc(x.t) + '</td><td>' + esc(x.d) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+          (cur.note ? '<p style="margin-top:10px">' + esc(cur.note) + '</p>' : '') + '</div></details>';
+      }
+      fb.innerHTML = d;
+    }
+  }
+
+  /* ══════════ 초안 추출 · 웹 표준 서식 (hondi.net pro-doc-page.js 와 같은 규격) ══════════ */
+  function parseFront(md) {
+    var fm = {}, m = md.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (m) m[1].split('\n').forEach(function (l) { var k = l.match(/^([A-Za-z_]+):\s*(.*)$/); if (k) fm[k[1]] = k[2].replace(/^["']|["']$/g, '').trim(); });
+    return fm;
+  }
+  function isDoc(md) { return /^---[ \t]*\n[\s\S]{0,800}?doc_type:/.test(md.trim()); }
+  function extractDoc(reply) {
+    var re = new RegExp('(^|\\n)(' + BT + '{3,}|~{3,})[ \\t]*(?:markdown|md)?[ \\t]*\\n([\\s\\S]*?)\\n\\2[ \\t]*(?=\\n|$)', 'g'), m;
+    while ((m = re.exec(reply))) { if (isDoc(m[3])) return { raw: m[0].replace(/^\n/, ''), md: m[3].trim() + '\n' }; }
+    var s = reply.match(/(^|\n)(---[ \t]*\n(?:[^\n]*\n){0,8}?doc_type:[^\n]*\n)/);
+    if (s) {
+      var tail = reply.slice(s.index + s[1].length);
+      var endM = tail.match(/\n\[(?:초안 검토 고지|1차 통로 고지|인간 전문가 상담 권고)\]/);
+      var raw = endM ? tail.slice(0, endM.index) : tail;
+      return { raw: raw, md: raw.trim() + '\n' };
+    }
+    return null;
+  }
+  function docTitle(md) { var fm = parseFront(md); if (fm.doc_type) return fm.doc_type; var h = md.match(/^#\s+(.+)$/m); return h ? h[1].trim() : '서류 초안'; }
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+  function fileName(title, d) { return title.replace(/[\\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') + '_' + d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + '.html'; }
+  function inlineH(s) { return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); }
+  function mdToHtml(md) {
+    var lines = md.replace(/\r/g, '').split('\n'), out = [], i = 0, list = null;
+    function closeList() { if (list) { out.push('</' + list + '>'); list = null; } }
+    var fm = md.match(/^---\s*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
+    if (fm) {
+      out.push('<table class="meta">');
+      fm[1].split('\n').forEach(function (l) { var k = l.match(/^([A-Za-z_]+):\s*(.*)$/); if (k) out.push('<tr><th>' + esc(k[1]) + '</th><td>' + inlineH(k[2].replace(/^["']|["']$/g, '')) + '</td></tr>'); });
+      out.push('</table>');
+      i = md.slice(0, fm[0].length).split('\n').length - 1;
+    }
+    for (; i < lines.length; i++) {
+      var l = lines[i], m;
+      if (/^\s*$/.test(l)) { closeList(); continue; }
+      if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { closeList(); out.push('<h' + m[1].length + '>' + inlineH(m[2]) + '</h' + m[1].length + '>'); continue; }
+      if (/^\s*(-{3,}|\*{3,})\s*$/.test(l)) { closeList(); out.push('<hr>'); continue; }
+      if (/^\s*\|.*\|\s*$/.test(l)) {
+        closeList();
+        var rows = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i]); i++; }
+        i--;
+        var cells = function (r) { return r.trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); }); };
+        var head = cells(rows[0]), body = rows.slice(/^\s*\|[\s:|-]+\|\s*$/.test(rows[1] || '') ? 2 : 1);
+        out.push('<div class="table-wrap" style="margin:8px 0"><table><thead><tr>' + head.map(function (c) { return '<th>' + inlineH(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+          body.map(function (r) { return '<tr>' + cells(r).map(function (c) { return '<td>' + inlineH(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>');
+        continue;
+      }
+      if ((m = l.match(/^\s*[-*]\s+(.*)$/))) { if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inlineH(m[1]) + '</li>'); continue; }
+      if ((m = l.match(/^\s*\d+[.)]\s+(.*)$/))) { if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inlineH(m[1]) + '</li>'); continue; }
+      if ((m = l.match(/^>\s?(.*)$/))) { closeList(); out.push('<blockquote>' + inlineH(m[1]) + '</blockquote>'); continue; }
+      closeList(); out.push('<p>' + inlineH(l) + '</p>');
+    }
+    closeList();
+    return out.join('\n');
+  }
+  function toWebDoc(title, md) {
+    return '<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>' + esc(title) + '</title><style>' +
+      'body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:17px;line-height:1.75;max-width:820px;margin:32px auto;padding:0 16px;color:#111}' +
+      'h1{font-size:1.5em}h2{font-size:1.25em;margin-top:1.6em}h3{font-size:1.1em}table{border-collapse:collapse;width:100%;margin:12px 0}' +
+      'th,td{border:1px solid #bbb;padding:6px 10px;text-align:left;vertical-align:top}th{background:#f2f4f7}table.meta{font-size:.9em;color:#444}' +
+      'blockquote{margin:12px 0;padding:8px 14px;border-left:4px solid #ccc;background:#fafafa}code{background:#f2f4f7;padding:1px 4px;border-radius:3px}' +
+      '@media print{body{margin:0;max-width:none}}</style></head><body>\n' + mdToHtml(md) + '\n</body></html>\n';
+  }
+
+  /* ══════════ 서류 작성 화면 ══════════ */
+  var PHASES = ['초안 작성', '수정·보완', '제출 준비', '수수료·결과 기록'];
+  var STATUS_RE = /\[[^\]|]*보조 AI\s*\|\s*서류 작성 트랙\s*\|\s*현재:\s*W-([1-9])([^\]]*)\]/;
+  function phaseOf(w) { return w <= 5 ? 1 : w === 6 ? 2 : w === 7 ? 3 : 4; }
+  function cleanRest(text, rawDoc) {
+    var t = String(text || '');
+    if (rawDoc) t = t.replace(rawDoc, '');
+    t = t.replace(/\[[^\]|]*보조 AI\s*\|\s*서류 작성 트랙[^\]]*\]/g, '')
+      .replace(/\[FORM_SAVE_PROPOSAL:[\s\S]*?\[\/FORM_SAVE_PROPOSAL\]/g, '')
+      .replace(/\[(?:NEXT_STEP|FORM_LOOKUP|WEB_SEARCH|DOCUMENT_DRAFT|REFER_LAWYER|ESCALATE_URGENT)[^\]]*\]/g, '');
+    return t.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function initWrite() {
+    var pid = qs.get('persona') || '', key = '', fieldName = '';
+    var st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '' };
+    var frame = null, ready = false, queue = [], busy = false, readyTimer = null;
+
+    function boot(fields) {
+      var ok = false;
+      if (pid === 'judicial-scrivener') { key = 'scrivener'; ok = true; }
+      else if (pid === 'lawyer') { key = 'lawyer'; ok = true; }
+      else if (/^lawyer-[a-z-]+$/.test(pid) && fields) {
+        var f = fields.filter(function (x) { return x.id === pid; })[0];
+        if (f) { key = 'lawyer'; fieldName = f.name; ok = true; }
+      }
+      if (!ok) { $('chooser').hidden = false; $('app').hidden = true; return; }
+      var P = PERSONA[key];
+      document.body.setAttribute('data-persona', key);
+      document.title = P.label + ' — 서류 작성 · 나비로 Navi Law';
+      $('h1').textContent = P.label + (fieldName ? ' · ' + fieldName : '') + ' — 서류 작성';
+      $('back').href = P.page + (fieldName ? '?field=' + enc(pid) : '');
+      $('fDoc').placeholder = P.docHint;
+      $('app').hidden = false;
+      frame = $('chatFrame');
+      frame.src = HONDI + '/pages/expert-chat.html?persona=' + enc(pid) + '&embed=1';
+      bind(); restoreOrStart();
+    }
+
+    function save() { storeSet('navilaw_write_' + pid, st); }
+    function render() {
+      var ph = phaseOf(st.w || 1), started = st.w > 0;
+      $('phases').innerHTML = PHASES.map(function (n, i) {
+        var cls = !started ? '' : (i + 1 < ph ? 'done' : i + 1 === ph ? 'on' : '');
+        return '<div class="phase ' + cls + '">' + (i + 1) + '. ' + esc(n) + '</div>';
+      }).join('');
+      var hasDraft = !!st.md;
+      $('draft').innerHTML = hasDraft ? mdToHtml(st.md) : '<div class="empty">' + (busy ? 'AI가 초안을 작성하는 중입니다…' : '서류를 정하면 여기에 초안이 나타납니다.') + '</div>';
+      $('draftTitle').textContent = hasDraft ? st.title : '초안';
+      var rest = $('blanks');
+      if (st.rest) { rest.hidden = false; $('blanksTitle').textContent = ph <= 2 ? '남은 빈 칸과 수정·보완' : '안내'; $('blanksBody').innerHTML = mdToHtml(st.rest); }
+      else rest.hidden = true;
+      var a = [];
+      if (hasDraft) {
+        a.push('<button type="button" class="btn sm" data-act="download">웹 표준 서식으로 내려받기</button>');
+        a.push('<button type="button" class="btn sm line" data-act="copy">복사</button>');
+        if (st.w <= 6) a.push('<button type="button" class="btn sm line" data-act="next">수정 끝 — 제출 준비로</button>');
+        else if (st.w === 7) a.push('<button type="button" class="btn sm line" data-act="submitted">제출을 마쳤습니다</button>');
+        else if (st.w === 8) a.push('<button type="button" class="btn sm line" data-act="paid">납부를 마쳤습니다(또는 해당 없음)</button>');
+      }
+      $('actions').innerHTML = a.join('');
+      $('busy').hidden = !busy;
+      $('startBox').hidden = started;
+      $('startSum').hidden = !started;
+      $('startSumText').textContent = st.doc ? '서류: ' + st.doc : '서류 작성 중';
+    }
+
+    function setBusy(v) { busy = v; render(); }
+    function post(text) { setBusy(true); try { frame.contentWindow.postMessage({ type: 'expert-embed-send', text: text }, HONDI); } catch (e) { setBusy(false); toast('대화창에 보내지 못했습니다. 새로 고침해 주세요.'); } }
+    function send(text) {
+      if (ready) { post(text); return; }
+      queue.push(text); setBusy(true);
+      if (!readyTimer) readyTimer = setTimeout(function () {
+        if (!ready) { setBusy(false); $('connWarn').hidden = false; }
+      }, 15000);
+    }
+    function flush() { if (readyTimer) { clearTimeout(readyTimer); readyTimer = null; } $('connWarn').hidden = true; while (queue.length) post(queue.shift()); }
+
+    function onReply(text) {
+      var m = STATUS_RE.exec(text), ex = extractDoc(text);
+      if (m) st.w = parseInt(m[1], 10);
+      else if (ex && st.w < 6) st.w = 6;
+      if (ex) { st.md = ex.md; st.title = docTitle(ex.md); st.at = Date.now(); }
+      st.rest = cleanRest(text, ex ? ex.raw : '');
+      save(); setBusy(false);
+      if (ex) { $('draftPane').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }
+
+    function startMessage(doc, memo, q) {
+      var tail = ' 모르는 항목은 묻지 말고 빈 칸으로 남긴 뒤, 초안 아래 빈 칸 표로 알려 주세요.';
+      if (q) return '다음 요청에 맞는 서류 초안을 작성해 주세요: ' + q + '.' + tail;
+      return '「' + doc + '」 초안을 작성해 주세요.' + (memo ? ' 알고 있는 내용: ' + memo + '.' : '') + tail;
+    }
+    function begin(doc, memo, q) {
+      st = { w: 1, doc: doc || (q ? q.slice(0, 40) : ''), md: '', title: '', at: 0, rest: '' };
+      save(); render(); send(startMessage(doc, memo, q));
+    }
+
+    function bind() {
+      window.addEventListener('message', function (e) {
+        if (e.origin !== HONDI || !frame || e.source !== frame.contentWindow || !e.data) return;
+        if (e.data.type === 'expert-embed-ready') { ready = true; flush(); }
+        else if (e.data.type === 'expert-embed-reply') onReply(String(e.data.text || ''));
+      });
+      $('startForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var doc = $('fDoc').value.trim(), memo = $('fMemo').value.trim();
+        if (!doc && !memo) { $('fDoc').focus(); toast('작성할 서류를 적어 주세요.'); return; }
+        begin(doc, memo, doc ? '' : memo);
+      });
+      $('newDoc').addEventListener('click', function () { st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '' }; save(); $('fDoc').value = ''; $('fMemo').value = ''; render(); $('fDoc').focus(); });
+      $('actions').addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-act]'); if (!b) return;
+        var act = b.getAttribute('data-act');
+        if (act === 'download') {
+          var blob = new Blob([toWebDoc(st.title, st.md)], { type: 'text/html;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+          a.href = url; a.download = fileName(st.title, new Date(st.at || Date.now())); document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        } else if (act === 'copy') {
+          var done = function () { toast('복사했습니다.'); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(st.md).then(done, function () { toast('복사하지 못했습니다.'); });
+          else toast('이 브라우저에서는 복사할 수 없습니다. 내려받기를 이용해 주세요.');
+        } else if (act === 'next') send('W-6 작성된 서류를 검증했고 제출 준비를 진행하겠습니다. 승인합니다.');
+        else if (act === 'submitted') send('W-7 제출을 직접 마쳤습니다. W-8로 진행해 주세요.');
+        else if (act === 'paid') send('W-8 수수료 납부를 직접 마쳤습니다(또는 납부 대상이 없습니다). W-9로 진행해 주세요.');
+      });
+    }
+
+    function restoreOrStart() {
+      var doc = (qs.get('doc') || '').slice(0, 80), q = (qs.get('q') || '').slice(0, 600);
+      if (doc || q) {
+        $('fDoc').value = doc;
+        try { history.replaceState(null, '', location.pathname + '?persona=' + enc(pid)); } catch (e) { /* 무시 */ }
+        begin(doc, '', doc ? '' : q);
+        return;
+      }
+      var saved = storeGet('navilaw_write_' + pid);
+      if (saved && saved.w > 0) { st = saved; }
+      render();
+    }
+
+    if (pid.indexOf('lawyer-') === 0) {
+      fetch('data/lawyer.json').then(function (r) { return r.json(); }).then(function (d) { boot(d.fields); }).catch(function () { boot(null); });
+    } else boot(null);
+  }
+
+  var page = document.body.getAttribute('data-page');
+  if (page === 'home') initHome();
+  else if (page === 'list') initList();
+  else if (page === 'write') initWrite();
+  window.NaviLaw = { route: route, extractDoc: extractDoc, mdToHtml: mdToHtml, cleanRest: cleanRest, phaseOf: phaseOf, STATUS_RE: STATUS_RE };
+})();
