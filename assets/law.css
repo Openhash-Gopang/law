@@ -312,3 +312,6 @@ body[data-page="home"] .home-min h1 { text-align: center; }
 body { min-height: 100vh; display: flex; flex-direction: column; }
 body > .wrap { width: 100%; box-sizing: border-box; flex: 0 0 auto; }
 body > .foot { margin-top: auto; }
+
+/* 홈 상단 서류 수 */
+.home-count { margin: 0 0 14px; min-height: 1.7em; text-align: center; color: var(--sub); font-size: 17px; font-weight: 600; }
