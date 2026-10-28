@@ -103,7 +103,7 @@ test('목록에 없는 서류는 결과가 없다 — 화면은 "직접 작성" 
 });
 
 test('"직접 작성" 줄의 조사: 받침 없음·ㄹ 받침은 "로", 그 밖은 "으로"', async () => {
-  const w = load('index.html');
+  const w = load('docs.html');
   await type(w, '소장'); assert.match(w.document.querySelector('.sug-free .sug-t').textContent, /「소장」으로 직접 작성/);
   await type(w, '내용증명서류'); assert.match(w.document.querySelector('.sug-free .sug-t').textContent, /「내용증명서류」로 직접 작성/);
   await type(w, '의결'); assert.match(w.document.querySelector('.sug-free .sug-t').textContent, /「의결」로 직접 작성/);
@@ -137,8 +137,8 @@ const tick = () => new Promise((r) => setTimeout(r, 30));
 const type = async (w, v) => { const i = w.document.getElementById('askInput'); i.value = v; i.dispatchEvent(new w.Event('input', { bubbles: true })); await tick(); };
 const key = (w, k) => w.document.getElementById('askInput').dispatchEvent(new w.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
 
-test('홈 자동 완성: 입력하면 제안이 열리고, 방향키·Enter로 고른 서류가 작성 화면으로 이어진다', async () => {
-  const w = load('index.html'); let went = ''; w.NaviLaw.go = (u) => { went = u; };
+test('서류 목록 자동 완성: 입력하면 제안이 열리고, 방향키·Enter로 고른 서류가 작성 화면으로 이어진다', async () => {
+  const w = load('docs.html'); let went = ''; w.NaviLaw.go = (u) => { went = u; };
   const input = w.document.getElementById('askInput'), list = w.document.getElementById('sugList');
   await type(w, '근저');
   assert.equal(list.hidden, false);
@@ -155,8 +155,8 @@ test('홈 자동 완성: 입력하면 제안이 열리고, 방향키·Enter로 �
   assert.ok(went.startsWith('write.html?persona=judicial-scrivener&doc=' + encodeURIComponent('근저당권')), went);
 });
 
-test('홈 자동 완성: 목록에 없는 서류는 직접 작성 줄만 나오고, 고르면 입력 그대로 작성 화면으로 간다', async () => {
-  const w = load('index.html'); let went = ''; w.NaviLaw.go = (u) => { went = u; };
+test('서류 목록 자동 완성: 목록에 없는 서류는 직접 작성 줄만 나오고, 고르면 입력 그대로 작성 화면으로 간다', async () => {
+  const w = load('docs.html'); let went = ''; w.NaviLaw.go = (u) => { went = u; };
   await type(w, '쿼카쿼카서류');
   const opts = w.document.querySelectorAll('#sugList [role=option]');
   assert.equal(opts.length, 1);
@@ -167,7 +167,7 @@ test('홈 자동 완성: 목록에 없는 서류는 직접 작성 줄만 나오�
 });
 
 test('자동 완성: 입력을 지우거나 Esc 로 닫고, 고르지 않은 Enter 는 막지 않는다', async () => {
-  const w = load('index.html'); const list = w.document.getElementById('sugList');
+  const w = load('docs.html'); const list = w.document.getElementById('sugList');
   await type(w, '소유권'); assert.equal(list.hidden, false);
   key(w, 'Escape'); assert.equal(list.hidden, true);
   await type(w, '소유권'); await type(w, ''); assert.equal(list.hidden, true);

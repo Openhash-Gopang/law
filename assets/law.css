@@ -207,7 +207,8 @@ td .fld, li .fld { width: 100%; }
 .badge.law { background: #e6ecf8; color: var(--navy); }
 
 /* 나비로의 특징 배너 (홈·서류 목록) */
-.promo-tab { position: fixed; right: 0; top: 38%; z-index: 60; writing-mode: vertical-rl; padding: 16px 9px; font: inherit; font-size: 15.5px; font-weight: 600; letter-spacing: .05em; color: #fff; background: var(--navy); border: 0; border-radius: 10px 0 0 10px; box-shadow: -2px 2px 10px rgba(0,0,0,.25); cursor: pointer; transition: transform .25s ease, opacity .2s; }
+.side-tabs { position: fixed; right: 0; top: 30%; z-index: 60; display: flex; flex-direction: column; gap: 10px; }
+.promo-tab { position: static; writing-mode: vertical-rl; padding: 16px 9px; font: inherit; font-size: 15.5px; font-weight: 600; letter-spacing: .05em; color: #fff; background: var(--navy); border: 0; border-radius: 10px 0 0 10px; box-shadow: -2px 2px 10px rgba(0,0,0,.25); cursor: pointer; transition: transform .25s ease, opacity .2s; }
 .promo-tab:hover { background: #0a3a8c; }
 .promo-tab:focus-visible { outline: 3px solid #ffd43b; outline-offset: 2px; }
 .promo-tab[aria-expanded="true"] { transform: translateX(100%); opacity: 0; pointer-events: none; }
@@ -230,3 +231,68 @@ td .fld, li .fld { width: 100%; }
 .tower-tip[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { .promo, .promo-tab, .tower svg { transition: none; } }
 @media print { .promo, .promo-tab { display: none !important; } }
+
+/* 첫 화면은 입력칸만 두고, 나머지는 옆면 패널("이용 안내")에 넣는다 */
+body[data-page="home"] .home-min { min-height: 58vh; display: flex; flex-direction: column; justify-content: center; }
+body[data-page="home"] .home-min h1 { text-align: center; }
+.promo.guide { background: #fff; color: var(--ink); box-shadow: -8px 0 28px rgba(0,0,0,.25); }
+.promo.guide h2 { color: var(--ink); }
+.promo.guide .promo-x { color: var(--ink); border-color: #94a3b8; }
+.promo.guide .promo-x:hover { background: #eef2f7; }
+.promo.guide .sub { margin: 4px 0 0; }
+.promo.guide .steps3 { margin-top: 24px; }
+.promo.guide .home-docs { margin-top: 22px; }
+.promo.guide .home-docs h2 { font-size: 19px; }
+
+/* 입력하는 즉시 입력칸 아래로 펼쳐지는 서류 미리보기 */
+.doc-prev { display: grid; grid-template-rows: 0fr; opacity: 0; margin-top: 0; transition: grid-template-rows .32s ease, opacity .22s ease, margin-top .32s ease; }
+.doc-prev.open { grid-template-rows: 1fr; opacity: 1; margin-top: 18px; }
+.doc-prev-in { overflow: hidden; min-height: 0; }
+.dp-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; box-shadow: 0 6px 22px rgba(15,35,70,.10); }
+.dp-card h2 { margin: 0; font-size: 22px; text-align: center; }
+.dp-meta { margin: 6px 0 0; text-align: center; font-size: 15px; color: var(--sub); }
+.dp-alt { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 12px 0 4px; }
+.dp-alt .chip { padding: 5px 12px; font-size: 15px; }
+.dp-tbl { width: 100%; border-collapse: collapse; margin-top: 14px; }
+.dp-tbl th, .dp-tbl td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; vertical-align: middle; font-size: 16px; }
+.dp-tbl th { width: 9em; background: #f1f5f9; font-weight: 600; }
+.dp-tbl td .fld { width: 100%; }
+.dp-tbl td .fld.pdv { width: calc(100% - 58px); }
+.dp-tbl td .fld-badge { margin-left: 8px; }
+.dp-sec { margin-top: 14px; padding: 12px 14px; border: 1px dashed #94a3b8; border-radius: 6px; color: var(--sub); font-size: 15.5px; }
+.dp-sec b { color: var(--ink); }
+.dp-foot { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.dp-note { font-size: 14.5px; color: var(--sub); }
+@media (prefers-reduced-motion: reduce) { .doc-prev { transition: none; } }
+@media print { .doc-prev { display: none; } }
+
+/* 입력칸 안쪽 아이콘: 왼쪽 가장자리 + (파일 첨부), 오른쪽 가장자리 마이크 */
+.sug-wrap.has-ico input[type=text] { padding-left: 56px; padding-right: 56px; }
+.ask-ico { position: absolute; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: var(--accent); background: transparent; border: 0; border-radius: 50%; cursor: pointer; }
+.ask-ico:hover { background: #e8f0fa; }
+.ask-ico:focus-visible { outline: 3px solid #fde68a; outline-offset: 1px; }
+.ask-plus { left: 8px; }
+.ask-mic { right: 8px; }
+.ask-mic[aria-pressed="true"] { color: #fff; background: #c62828; animation: mic-pulse 1.2s ease-in-out infinite; }
+@keyframes mic-pulse { 50% { box-shadow: 0 0 0 7px rgba(198,40,40,.22); } }
+.att-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.att-list li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; background: #fff; border: 1px solid #cbd5e1; border-radius: 999px; font-size: 15px; color: #334155; }
+.att-list li small { color: var(--sub); }
+.att-list button { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: #eef2f7; color: #334155; cursor: pointer; font-size: 16px; line-height: 1; }
+@media (prefers-reduced-motion: reduce) { .ask-mic[aria-pressed="true"] { animation: none; } }
+
+/* 내 서류 목록 */
+.sortbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0 12px; }
+.sortbtn { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 6px 14px; font: inherit; font-size: 16px; color: #334155; background: #fff; border: 1px solid #cbd5e1; border-radius: 999px; cursor: pointer; }
+.sortbtn[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.sortbtn:focus-visible { outline: 3px solid #fde68a; outline-offset: 1px; }
+.my-row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 12px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+.my-row h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.my-row .small { margin: 2px 0 0; }
+.my-row .who { font-weight: 600; }
+.my-row .acts { display: flex; gap: 8px; }
+.my-head { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 12px; padding: 0 16px 6px; font-size: 14.5px; color: var(--sub); }
+@media (max-width: 720px) { .my-head { display: none; } .my-row { grid-template-columns: 1fr; gap: 6px; } }
+
+.verdict-tab { display: block; text-decoration: none; text-align: center; background: var(--accent); }
+.verdict-tab:hover { background: #004a8f; }

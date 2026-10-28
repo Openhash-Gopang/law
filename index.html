@@ -16,7 +16,7 @@
     <a class="brand" href="./">나비로 Navi Law</a>
     <nav class="nav" aria-label="주 메뉴">
       <a href="./" aria-current="page">홈</a>
-      <a href="docs.html">서류 목록</a>
+      <a href="mydocs.html">내 서류 목록</a>
     </nav>
     <div class="head-right">
       <a class="ext" href="https://hondi.net" target="_blank" rel="noopener">혼디넷</a>
@@ -24,7 +24,10 @@
     </div>
   </div>
 </header>
-<button type="button" class="promo-tab" id="promoTab" aria-controls="promo" aria-expanded="false">나비로의 특징</button>
+<div class="side-tabs">
+  <a class="promo-tab verdict-tab" id="verdictTab" href="https://klaw.hondi.net/verdict-generate.html" target="_blank" rel="noopener" title="K-Law로 대법원 판결문을 예상합니다 (새 창)">대법원 판결문 예상</a>
+  <button type="button" class="promo-tab" id="promoTab" aria-controls="promo" aria-expanded="false">나비로의 특징</button>
+</div>
 <aside class="promo" id="promo" aria-labelledby="promoH" aria-hidden="true">
   <div class="promo-head">
     <h2 id="promoH">나비로의 특징</h2>
@@ -42,38 +45,36 @@
   <p class="promo-note">※ 예상 판결문은 참고용이며 법적 효력이 없습니다.</p>
   <button type="button" class="promo-never" id="promoClose" aria-label="나비로의 특징 자동으로 열지 않기">다시 보지 않기</button>
 </aside>
-<main class="wrap">
-  <h1>법률 서류, 초안부터 받으십시오</h1>
-  <p class="sub">작성할 서류를 말씀하시면 AI가 먼저 초안을 씁니다. 모르는 칸은 비워 두니, 아는 만큼만 채워 고치시면 됩니다. 직역을 가리지 않고 모든 서류를 씁니다.</p>
+<main class="wrap home-min">
+  <h1 class="sr">법률 서류, 초안부터 받으십시오</h1>
   <form id="askForm" class="ask" role="search">
     <label for="askInput" class="sr">작성할 서류 또는 사건</label>
-    <div class="sug-wrap">
+    <div class="sug-wrap has-ico">
       <input type="text" id="askInput" maxlength="600" placeholder="예: 소유권이전등기 신청서, 답변서, 내용증명" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugList">
-      <ul id="sugList" class="sug" role="listbox" aria-label="서류 제안" hidden></ul>
+      <button type="button" class="ask-ico ask-plus" id="attBtn" aria-label="파일 첨부"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg></button>
+      <input type="file" id="attFile" multiple hidden>
+      <button type="button" class="ask-ico ask-mic" id="micBtn" aria-label="음성으로 입력" aria-pressed="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
     </div>
     <button type="submit" class="btn">초안 작성</button>
   </form>
+  <ul class="att-list" id="attList" aria-label="첨부한 파일"></ul>
   <div id="sugStatus" class="sr" role="status" aria-live="polite"></div>
-  <div class="chips" aria-label="예시">
-    <button type="button" class="chip" data-q="근저당권 말소등기 신청서 작성">근저당 말소 신청서</button>
-    <button type="button" class="chip" data-q="개인회생 신청 서류 작성">개인회생 신청 서류</button>
-    <button type="button" class="chip" data-q="답변서 작성">답변서</button>
-    <button type="button" class="chip" data-q="내용증명 작성">내용증명</button>
-  </div>
-  <div class="notice">AI는 초안을 만듭니다. 검토·승인·서명·제출은 사람 전문가가 하고, 자격·업무 범위 등 법적 제한의 확인과 책임도 사람 전문가에게 있습니다.</div>
-
-  <section class="home-docs" aria-labelledby="hd">
-    <h2 id="hd">서류 399건, 분야 46개</h2>
-    <p class="small">등기·공탁·경매·개인회생부터 소송·수사 대응·계약·법률 의견 서류까지 한곳에서 찾습니다. 입력창에 몇 글자만 쳐도 서류가 제안됩니다.</p>
-    <a class="btn line" href="docs.html">서류 목록 보기</a>
-  </section>
-
-  <div class="steps3">
-    <div><b>1. 서류를 말씀하십시오</b>입력창이나 서류 목록으로 시작합니다.</div>
-    <div><b>2. 초안을 받고 고치십시오</b>빈 칸 표를 보며 아는 칸만 알려 주시면 바로 반영합니다.</div>
-    <div><b>3. 전문가가 확정합니다</b>검토·승인한 뒤 웹 표준 서식으로 내려받습니다.</div>
-  </div>
+  <section class="doc-prev" id="docPrev" aria-label="서류 미리보기"><div class="doc-prev-in" id="docPrevIn"></div></section>
 </main>
+<button type="button" class="chat-fab" id="chatFab" aria-label="대화창 열기" aria-expanded="false" aria-controls="chatPanel">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/></svg>
+</button>
+<section class="chat-panel" id="chatPanel" role="dialog" aria-labelledby="chatH" aria-hidden="true">
+  <div class="chat-panel-h">
+    <h2 id="chatH">궁금한 점은 여기에 말씀하십시오</h2>
+    <button type="button" class="chat-close" id="chatClose" aria-label="대화창 닫기">
+      <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <p class="small chat-help">서류와 절차에 대해 물어보실 수 있습니다. 대화창이 로그인을 요구하면 로그인해 주세요.</p>
+  <iframe id="chatFrame" class="chat-frame" title="서류 보조 AI 대화" allow="microphone; camera"></iframe>
+</section>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <footer class="foot">
   <div class="foot-in">
     <p style="margin:0">나비로 Navi Law는 법률 자문이나 대리를 제공하지 않는 보조 도구입니다. 서명·기명날인·제출·납부와 자격·업무 범위 등 법적 제한의 확인은 사람 전문가가 직접 하며, 그 책임도 사람 전문가에게 있습니다.</p>

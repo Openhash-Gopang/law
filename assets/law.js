@@ -123,9 +123,143 @@
   }
 
   /* ══════════ 홈 ══════════ */
+  /* 떠 있는 대화 아이콘 — 처음 누를 때 대화창(hondi.net)을 불러온다. 홈·서류 목록에서 서류와 절차를 묻는 용도. */
+  function initChat() {
+    var fab = $('chatFab'), panel = $('chatPanel'); if (!fab || !panel) return;
+    var loaded = false;
+    function setChat(open) {
+      if (open && !loaded) { loaded = true; $('chatFrame').src = HONDI + '/pages/expert-chat.html?persona=' + enc(ENGINE_L) + '&embed=1&label=' + enc(LABEL); }
+      panel.classList.toggle('open', open);
+      panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+      fab.setAttribute('aria-expanded', open ? 'true' : 'false');
+      fab.setAttribute('aria-label', open ? '대화창 닫기' : '대화창 열기');
+      try { (open ? $('chatClose') : fab).focus(); } catch (e) { /* 무시 */ }
+    }
+    fab.addEventListener('click', function () { setChat(!panel.classList.contains('open')); });
+    $('chatClose').addEventListener('click', function () { setChat(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && panel.classList.contains('open')) setChat(false); });
+  }
+  /* ── 내 서류: 작성한 서류를 이 브라우저에 모아 둔다(최대 50건). 주민등록번호 등 민감한 칸의 값은 넣지 않는다. ── */
+  var MY_KEY = 'navilaw_mydocs', MY_MAX = 50;
+  function myDocs() { var a = storeGet(MY_KEY); return Array.isArray(a) ? a : []; }
+  function myDocPut(rec) {
+    var a = myDocs().filter(function (x) { return x.id !== rec.id; }); a.unshift(rec);
+    a.sort(function (x, y) { return y.at - x.at; }); storeSet(MY_KEY, a.slice(0, MY_MAX));
+  }
+  function fmtTime(t) { var d = new Date(t), p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '.' + p(d.getMonth() + 1) + '.' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+  function initMyDocs() {
+    var key = 'time', dir = { time: -1, name: 1, client: 1 }, box = $('myList');
+    function cmpStr(a, b) { return String(a || '').localeCompare(String(b || ''), 'ko'); }
+    function sorted() {
+      var a = myDocs().slice(), d = dir[key];
+      a.sort(function (x, y) {
+        var r = key === 'time' ? x.at - y.at : key === 'name' ? cmpStr(x.title, y.title) : cmpStr(x.client, y.client);
+        return (r || y.at - x.at) * (r ? d : 1);   // 같으면 최근 것이 먼저
+      });
+      return a;
+    }
+    function draw() {
+      var a = sorted();
+      Array.prototype.forEach.call(document.querySelectorAll('.sortbtn'), function (b) {
+        var k = b.getAttribute('data-sort'), on = k === key;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.querySelector('.dir').textContent = on ? (dir[k] < 0 ? '↓' : '↑') : '';
+      });
+      $('myCount').textContent = a.length ? '총 ' + a.length + '건' : '';
+      if (!a.length) { box.innerHTML = '<div class="empty">아직 작성한 서류가 없습니다. 홈에서 서류명을 입력하면 초안을 만들어 이곳에 모아 둡니다.</div>'; return; }
+      box.innerHTML = '<div class="my-head" aria-hidden="true"><span>서류</span><span>의뢰인</span><span>작성</span><span></span></div>' + a.map(function (x) {
+        return '<div class="my-row" data-id="' + esc(x.id) + '"><div><h2>' + esc(x.title) + '</h2>' + (x.step ? '<p class="small">' + esc(x.step) + '</p>' : '') + '</div>' +
+          '<div class="who">' + esc(x.client || '의뢰인 미상') + '</div><div class="small">' + esc(fmtTime(x.at)) + '</div>' +
+          '<div class="acts"><button type="button" class="btn sm" data-open="' + esc(x.id) + '">열기</button><button type="button" class="btn sm line" data-del="' + esc(x.id) + '" aria-label="' + esc(x.title) + ' 삭제">삭제</button></div></div>';
+      }).join('');
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.sortbtn'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-sort');
+        if (k === key) dir[k] = -dir[k]; else { key = k; dir[k] = k === 'time' ? -1 : 1; }
+        draw();
+      });
+    });
+    box.addEventListener('click', function (e) {
+      var o = e.target.closest('[data-open]'), x = e.target.closest('[data-del]');
+      if (o) {
+        var rec = myDocs().filter(function (r) { return r.id === o.getAttribute('data-open'); })[0];
+        if (rec && rec.state) { storeSet('navilaw_write_last', rec.state); window.NaviLaw.go('write.html'); }
+      } else if (x) {
+        var id = x.getAttribute('data-del'), r2 = myDocs().filter(function (r) { return r.id === id; })[0];
+        if (r2 && window.confirm('「' + r2.title + '」을(를) 내 서류 목록에서 지울까요?')) { storeSet(MY_KEY, myDocs().filter(function (r) { return r.id !== id; })); draw(); }
+      }
+    });
+    draw();
+  }
+
+  /* 입력칸의 + (파일 첨부)와 마이크. 첨부한 글 파일의 내용은 작성 화면으로 넘어가 첫 요청에 함께 실린다. 글이 아닌 파일은 이름만 전한다. */
+  var ATT_KEY = 'navilaw_attach', ATT_MAX = 4000;
+  function initAttach(input) {
+    var btn = $('attBtn'), file = $('attFile'), list = $('attList'), mic = $('micBtn'), files = [];
+    if (!btn || !file) return;
+    function persist() {
+      var text = files.filter(function (f) { return f.text; }).map(function (f) { return '[' + f.name + ']\n' + f.text; }).join('\n\n').slice(0, ATT_MAX);
+      try { sessionStorage.setItem(ATT_KEY, JSON.stringify({ names: files.map(function (f) { return f.name; }), text: text })); } catch (e) { /* 이번만 넘기지 못한다 */ }
+    }
+    function draw() {
+      list.innerHTML = files.map(function (f, i) {
+        return '<li>' + esc(f.name) + (f.text ? '' : ' <small>(이름만 전달)</small>') + '<button type="button" data-rm="' + i + '" aria-label="' + esc(f.name) + ' 빼기">×</button></li>';
+      }).join('');
+    }
+    btn.addEventListener('click', function () { file.click(); });
+    file.addEventListener('change', function () {
+      Array.prototype.forEach.call(file.files || [], function (f) {
+        if (files.length >= 5 || files.some(function (x) { return x.name === f.name; })) return;
+        var rec = { name: f.name, text: '' };
+        files.push(rec);
+        if (/^text\//.test(f.type) || /\.(txt|md|csv|json|html?)$/i.test(f.name)) {
+          var r = new FileReader();
+          r.onload = function () { rec.text = String(r.result || '').slice(0, ATT_MAX); persist(); draw(); };
+          r.readAsText(f);
+        }
+      });
+      file.value = ''; persist(); draw();
+    });
+    list.addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (!b) return; files.splice(+b.getAttribute('data-rm'), 1); persist(); draw(); });
+    try { sessionStorage.removeItem(ATT_KEY); } catch (e) { /* 무시 */ }
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null, base = '';
+    mic.addEventListener('click', function () {
+      if (!SR) { toast('이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬이나 엣지에서 이용해 주세요.'); return; }
+      if (rec) { rec.stop(); return; }
+      rec = new SR(); rec.lang = 'ko-KR'; rec.interimResults = true; rec.continuous = false; base = input.value ? input.value.replace(/\s*$/, ' ') : '';
+      rec.onresult = function (ev) {
+        var t = ''; for (var i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript;
+        input.value = (base + t).slice(0, 600); input.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      rec.onerror = function (ev) { if (ev && ev.error === 'not-allowed') toast('마이크 사용을 허용해 주세요.'); };
+      rec.onend = function () { rec = null; mic.setAttribute('aria-pressed', 'false'); mic.setAttribute('aria-label', '음성으로 입력'); };
+      try { rec.start(); mic.setAttribute('aria-pressed', 'true'); mic.setAttribute('aria-label', '음성 입력 끝내기'); } catch (e) { rec = null; }
+    });
+  }
+  function takeAttach() {
+    try { var a = JSON.parse(sessionStorage.getItem(ATT_KEY) || 'null'); sessionStorage.removeItem(ATT_KEY); return a && (a.names || []).length ? a : null; } catch (e) { return null; }
+  }
+  /* 시험용(시뮬레이션) 의뢰인 — 실제로는 의뢰인의 PDV 에서 가져온다. 작성 화면과 홈의 서류 미리보기가 함께 쓴다. */
+  var SIM_CLIENT = { name: '도 영민', address: '제주시 한림읍 금능남로 3', phone: '010-9662-7170', email: 'tensor.city@gmail.com', rrn: '641005-1******' };
+  function docPreviewHtml(title, hit, alts) {
+    var meta = hit ? esc(hit.c) + (hit.d ? ' · ' + esc(hit.d) : '') : '말씀하신 대로 초안을 씁니다';
+    function row(label, val, ph, pdv) {
+      return '<tr><th scope="row">' + esc(label) + '</th><td><input type="text" class="fld' + (pdv ? ' pdv' : '') + (val ? ' done' : '') + '" aria-label="' + esc(label) + '" placeholder="' + esc(ph) + '" value="' + esc(val || '') + '">' + (pdv ? '<span class="fld-badge" title="의뢰인의 PDV에서 가져온 값입니다.">PDV</span>' : '') + '</td></tr>';
+    }
+    var h = '<div class="dp-card"><h2>' + esc(title) + '</h2><p class="dp-meta">' + meta + '</p>';
+    if (alts && alts.length) h += '<div class="dp-alt" aria-label="비슷한 서류">' + alts.map(function (t) { return '<button type="button" class="chip" data-alt="' + esc(t) + '">' + esc(t) + '</button>'; }).join('') + '</div>';
+    h += '<table class="dp-tbl"><tbody>' +
+      row('신청인 성명', SIM_CLIENT.name, '성명', true) + row('주소', SIM_CLIENT.address, '주소', true) + row('전화번호', SIM_CLIENT.phone, '전화번호', true) +
+      row('이메일', SIM_CLIENT.email, '이메일', true) + row('주민등록번호', SIM_CLIENT.rrn, '주민등록번호', true) + row('상대방·대상', '', '해당하면 적어 주십시오') + '</tbody></table>' +
+      '<div class="dp-sec"><b>신청 취지·이유·첨부서류</b> — 「이 서류 초안 작성」을 누르면 AI가 이 서류에 맞게 바로 채웁니다.</div>' +
+      '<div class="dp-foot"><button type="button" class="btn" data-go="1">이 서류 초안 작성</button><span class="dp-note">서식 기본 틀입니다. 의뢰인 정보는 PDV에서 채워졌고, 변호사·법무사가 승인합니다.</span></div></div>';
+    return h;
+  }
   function initHome() {
-    var form = $('askForm'), input = $('askInput');
+    var form = $('askForm'), input = $('askInput'), prev = $('docPrev'), prevIn = $('docPrevIn'), db = null, index = null, sig = '', cur = '', timer = null;
     attachSuggest(input, form);
+    initAttach(input);
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var t = input.value.trim();
@@ -135,6 +269,30 @@
     Array.prototype.forEach.call(document.querySelectorAll('.chip[data-q]'), function (c) {
       c.addEventListener('click', function () { input.value = c.getAttribute('data-q'); form.requestSubmit(); });
     });
+    /* 서류 미리보기 — 입력하면 곧바로(0.12초 뒤) 입력칸 아래로 펼친다. 서류 목록이 아직 오지 않았어도 입력한 말로 먼저 펼치고, 목록이 오면 맞는 서류로 바꾼다. */
+    function showPrev() {
+      var q = input.value.trim();
+      if (!q) { prev.classList.remove('open'); prev.setAttribute('aria-hidden', 'true'); sig = ''; return; }
+      var hits = index ? window.NaviLawDocs.search(index, q, { limit: 5 }).filter(function (e) { return e.kind !== 'field'; }) : [];
+      var top = hits[0] || null, title = top ? top.t : q, issued = db && window.NaviLawDocs.findIssued ? window.NaviLawDocs.findIssued(db, title) : null;
+      var key = title + '|' + (issued ? 'i' : '');
+      cur = title;
+      if (key !== sig) {
+        sig = key;
+        if (issued) prevIn.innerHTML = '<div class="dp-card"><h2>' + esc(title) + '</h2><p class="dp-meta">발급받아 첨부하는 서류입니다</p><div class="dp-foot"><button type="button" class="btn" data-go="1">발급 안내 보기</button><span class="dp-note">작성하는 서류가 아니라 발급처·준비물을 안내합니다.</span></div></div>';
+        else prevIn.innerHTML = docPreviewHtml(title, top, hits.slice(1, 5).map(function (e) { return e.t; }));
+      }
+      prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
+    }
+    function schedule() { if (timer) clearTimeout(timer); timer = setTimeout(showPrev, 120); }
+    input.addEventListener('input', schedule);
+    prevIn.addEventListener('click', function (e) {
+      var alt = e.target.closest('[data-alt]'), go = e.target.closest('[data-go]');
+      if (alt) { input.value = alt.getAttribute('data-alt'); input.focus(); showPrev(); }
+      else if (go && cur) window.NaviLaw.go(writeUrl(ENGINE_L, { doc: cur }));
+    });
+    fetch('data/docs.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) { db = d; index = window.NaviLawDocs.createIndex(d); if (input.value.trim()) showPrev(); }).catch(function () { /* 목록이 없어도 입력한 말로 미리보기는 나온다 */ });
   }
 
   /* ══════════ 서류 목록 (직역 구분 없이 한 목록) ══════════ */
@@ -368,7 +526,7 @@
       if (pid !== ENGINE_S && pid !== ENGINE_L && !fieldName) pid = ENGINE_L;
       document.title = '서류 작성 · 나비로 Navi Law';
       $('h1').textContent = '서류 작성' + (fieldName ? ' · ' + fieldName : '');
-      $('back').href = 'docs.html' + (fieldName ? '?field=' + enc(pid) : '');
+      $('back').href = 'mydocs.html';
       frame = $('chatFrame');
       frame.src = HONDI + '/pages/expert-chat.html?persona=' + enc(pid) + '&embed=1&label=' + enc(LABEL);
       bind();
@@ -385,12 +543,19 @@
 
     function save() {
       st.pid = pid;
+      if (st.md && st.kind !== 'issued') fields = scanBlanks(st.md);
       var keep = {}, snap = {}, k, sens = {}, i;
       for (i = 0; i < fields.length; i++) if (fields[i].sensitive) sens[fields[i].key] = 1;
       for (k in st) if (Object.prototype.hasOwnProperty.call(st, k)) snap[k] = st[k];
       for (k in st.vals) if (!sens[k]) keep[k] = st.vals[k];   // 주민등록번호 등은 이 화면을 닫으면 사라지게 저장하지 않는다
       snap.vals = keep;
       storeSet('navilaw_write_last', snap);
+      if (st.md && st.kind !== 'issued') {   // 초안이 있으면 내 서류 목록에도 올린다
+        if (!st.id) st.id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        snap.id = st.id;
+        var nm = fields.filter(function (f) { return f.kind === 'name'; })[0];
+        myDocPut({ id: st.id, title: st.title || st.doc, client: (nm && valOf(nm)) || '', at: st.at || Date.now(), step: PHASES[phaseOf(st.w || 1) - 1], state: snap });
+      }
     }
     var saveT = null;
     function saveSoon() { if (saveT) clearTimeout(saveT); saveT = setTimeout(function () { saveT = null; save(); }, 400); }
@@ -431,7 +596,6 @@
     /* ── 혼디 PDV (의뢰인의 AI 비서에게 요청) ── */
     var AC_ORIGINS = [HONDI, 'https://www.hondi.net'], PDV_NAME = { name: '이름', phone: '연락처', address: '주소', email: '이메일' };
     /* 시험용(시뮬레이션) 의뢰인 — 실제로는 의뢰인의 PDV 에서 가져온다. 비서가 연 창이 아닐 때 이 값으로 채운다. */
-    var SIM_CLIENT = { name: '도 영민', address: '제주시 한림읍 금능남로 3', phone: '010-9662-7170', email: 'tensor.city@gmail.com', rrn: '641005-1******' };
     function simFill() {
       var n = 0;
       pdvWants().forEach(function (f) { var v = SIM_CLIENT[f.kind]; if (v) { st.vals[f.key] = v; st.pdv[f.key] = 1; n++; } });
@@ -565,7 +729,8 @@
     function begin(doc, memo, q) {
       var N = window.NaviLawDocs, it = !q && doc && N.findIssued ? N.findIssued(docsDb, doc) : (q && N.findIssuedAsk ? N.findIssuedAsk(docsDb, q) : null);   // 받아서 첨부하는 서류는 초안이 아니라 발급 안내로 시작한다 — 서류명만 고른 경우와 "…떼는 법" 같은 발급 문의 문장
       st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '', vals: {}, pdv: {} }; drawSig = ''; pdvStatus = ''; nudged = false; pdvAuto = false;
-      save(); render(); send(it ? N.issuedAsk(it, memo, q) : startMessage(doc, memo, q));
+      var att = takeAttach(), extra = att ? ' 의뢰인이 첨부한 자료: ' + att.names.join(', ') + '.' + (att.text ? '\n\n' + att.text : '') : '';
+      save(); render(); send(it ? N.issuedAsk(it, memo, q) : startMessage(doc, memo, q) + extra);
     }
 
     function bind() {
@@ -611,11 +776,22 @@
   /* ── 나비로의 특징 배너 — "다시 보지 않기"를 누르면 이 브라우저에서 다시 나오지 않는다(문구를 바꾸면 키의 버전을 올려 다시 보이게 한다). ── */
   var PROMO_KEY = 'navilaw_promo_v1';
   function initPromo() {
-    var el = $('promo'); if (!el) return;
-    var box = el.parentNode && el.parentNode.className === 'promo-wrap' ? el.parentNode : el;
-    try { if (localStorage.getItem(PROMO_KEY) === '1') { box.remove(); return; } } catch (e) { /* 저장을 못 하면 그냥 보인다 */ }
-    var b = $('promoClose');
-    if (b) b.addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } box.remove(); });
+    var el = $('promo'), tab = $('promoTab'); if (!el || !tab) return;
+    var seen = false;
+    try { seen = localStorage.getItem(PROMO_KEY) === '1'; } catch (e) { /* 저장을 못 하면 처음 온 것으로 본다 */ }
+    function setOpen(open, focus) {
+      el.classList.toggle('open', open);
+      el.setAttribute('aria-hidden', open ? 'false' : 'true');
+      tab.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (focus) { try { (open ? $('promoX') : tab).focus(); } catch (e) { /* 무시 */ } }
+    }
+    tab.addEventListener('click', function () { setOpen(true, true); });
+    $('promoX').addEventListener('click', function () { setOpen(false, true); });
+    $('promoClose').addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } setOpen(false, true); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && el.classList.contains('open')) setOpen(false, true); });
+    var tb = $('towerBtn'), tip = $('towerTip');
+    if (tb && tip) tb.addEventListener('click', function () { var o = tip.hidden; tip.hidden = !o; tb.setAttribute('aria-expanded', o ? 'true' : 'false'); });
+    if (!seen) setTimeout(function () { setOpen(true, false); }, 350);   // 처음 오신 분께는 한 번 밀어서 보여 드린다
   }
 
   /* 나만의 AI 비서(hondi.net)가 ?gwp=1&origin=… 로 연 창이면 그 출처를 기억한다 — 이후 다른 쪽으로 이동해도 window.opener 로 비서와 이야기할 수 있다. */
@@ -623,9 +799,10 @@
     try { var o = qs.get('origin') || ''; if (qs.get('gwp') === '1' && (o === HONDI || o === 'https://www.hondi.net')) sessionStorage.setItem('navilaw_ac', o); } catch (e) { /* 무시 */ }
   })();
   var page = document.body.getAttribute('data-page');
-  initPromo();
+  initPromo(); initChat();
   if (page === 'home') initHome();
   else if (page === 'docs') initDocs();
+  else if (page === 'mydocs') initMyDocs();
   else if (page === 'write') initWrite();
   window.NaviLaw = { scanBlanks: scanBlanks, fillBlanks: fillBlanks, pdvKind: pdvKind, go: function (u) { location.href = u; }, route: route, pickEngine: pickEngine, attachSuggest: attachSuggest, extractDoc: extractDoc, mdToHtml: mdToHtml, cleanRest: cleanRest, phaseOf: phaseOf, STATUS_RE: STATUS_RE };
 })();
