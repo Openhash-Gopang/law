@@ -522,4 +522,5 @@ test('홈: AI 초안이 오면 같은 화면에 입력 칸으로 펼치고 PDV �
   assert.equal(inputs[0].value, '도 영민');
   assert.equal(inputs[2].value, '');
   assert.ok(w.document.querySelector('#docPrevIn [data-act="download"]'));
+  assert.equal(w.document.querySelector('#docPrevIn .dp-rest'), null, '찌꺼기뿐인 안내는 보이지 않는다');
 });
