@@ -143,3 +143,41 @@ test('모든 HTML의 로컬 링크·스크립트가 실제 파일을 가리킨�
   }
   assert.equal(read('CNAME').trim(), 'law.hondi.net');
 });
+
+const PROMO_LINES = [
+  '12,000여 건의 민원 및 법원 서류를 말 한 마디로 작성합니다.',
+  '법원 API를 발급받으면, 법원 등 관련 기관과 부서에 서류 제출까지 나비로가 진행합니다.',
+  '금융 기관과 협력하면, 각종 수수료와 인지대 납부도 처리합니다.',
+  '분쟁이 발생하면, 법원의 예상 판결문을 상당한 신뢰도로 생성하므로, 불필요한 소송 남발을 막습니다.',
+];
+
+test('배너: 홈·서류 목록에만 "나비로의 특징" 네 줄이 있고, 작성 화면에는 없다', () => {
+  for (const p of ['index.html', 'docs.html']) {
+    const w = load(p).window, el = w.document.getElementById('promo');
+    assert.ok(el, p);
+    assert.equal(el.querySelector('h2').textContent, '나비로의 특징');
+    assert.deepEqual([...el.querySelectorAll('ol > li')].map((l) => l.textContent), PROMO_LINES);
+    assert.match(el.querySelector('.promo-close').textContent, /다시 보지 않기/);
+    assert.ok(el.querySelector('.promo-close svg'), '닫기 표시(X)');
+    assert.match(el.querySelector('.promo-note').textContent, /예상 판결문은 참고용이며 법적 효력이 없습니다/);
+  }
+  for (const p of ['write.html', '404.html']) assert.equal(load(p).window.document.getElementById('promo'), null, p);
+});
+
+test('배너: 다시 보지 않기를 누르면 닫히고 기억하며, 기억한 브라우저에는 다시 나오지 않는다', () => {
+  const w = load('index.html').window;
+  w.document.getElementById('promoClose').click();
+  assert.equal(w.document.getElementById('promo'), null);
+  assert.equal(w.document.querySelector('.promo-wrap'), null, '빈 띠가 남지 않는다');
+  assert.equal(w.localStorage.getItem('navilaw_promo_v1'), '1');
+  assert.equal(load('docs.html', '', '', { navilaw_promo_v1: 1 }).window.document.getElementById('promo'), null);
+  assert.equal(load('index.html', '', '', {}).window.document.getElementById('promo') !== null, true, '기억이 없으면 보인다');
+});
+
+test('배너: 접근성(제목 연결·키보드로 닫기 버튼)과 인쇄 숨김', () => {
+  const w = load('index.html').window, el = w.document.getElementById('promo');
+  assert.equal(el.getAttribute('aria-labelledby'), 'promoH');
+  const b = w.document.getElementById('promoClose');
+  assert.equal(b.tagName, 'BUTTON'); assert.ok(b.getAttribute('aria-label'));
+  assert.match(read('assets/law.css'), /@media print \{ \.promo-wrap \{ display: none/);
+});
