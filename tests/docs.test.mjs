@@ -11,7 +11,7 @@ import { buildDocsDb, serialize } from '../scripts/build-docs-index.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const db = JSON.parse(read('data/docs.json'));           // 실제 배포본(법제처 민원서식 포함)
-const CORE = buildDocsDb({ forms: [] });                   // 핵심 서류만 — 수집 데이터와 무관하게 검색 동작을 시험한다
+const CORE = buildDocsDb({ forms: [], issued: [] });        // 핵심 서류만 — 수집·발급 서류 데이터와 무관하게 검색 동작을 시험한다
 const win = {}; vm.runInNewContext(read('assets/docs-search.js'), { window: win });
 const D = win.NaviLawDocs, idx = D.createIndex(CORE);
 const titles = (r) => r.map((e) => e.t);
@@ -27,9 +27,47 @@ test('서류 DB: 핵심 서류는 법무사 98 + 변호사 공통 19 + 세부 �
   assert.equal(CORE.fields.length, 46);
   assert.ok(!CORE.docs.some((d) => d.t === '유의'));
   for (const d of CORE.docs) assert.ok(d.t && d.p && d.pid && d.c, JSON.stringify(d));
-  assert.equal(db.docs.filter((d) => d.p !== 'minwon').length, 399, '배포본의 핵심 서류 수');
+  assert.equal(db.docs.filter((d) => d.p !== 'minwon' && d.p !== 'issued').length, 399, '배포본의 핵심 서류 수');
   assert.equal(db.fields.length, 46);
   for (const d of db.docs.filter((x) => x.p === 'minwon')) assert.ok(d.t && d.c, JSON.stringify(d));
+});
+
+// 발급 민원서류 — 등기·소송에 첨부하는 가족관계증명서 같은 서류. 법제처 서식 목록에는 이름이 없어 data/issued-docs.json 에 따로 둔다.
+const ISSUED = JSON.parse(read('data/issued-docs.json')).docs;
+const WITH_ISSUED = D.createIndex(buildDocsDb({ forms: [] }));
+test('발급 서류: 모든 항목에 서류명·발급처·안내가 있고, 이름이 겹치지 않으며 핵심 서류와도 겹치지 않는다', () => {
+  assert.ok(ISSUED.length >= 40, '발급 서류 ' + ISSUED.length + '건');
+  const seen = new Set(), core = new Set(CORE.docs.map((d) => d.t.replace(/\s+/g, '')));
+  for (const f of ISSUED) {
+    assert.ok(f.t && f.d && /^(발급 서류|조회 신청) · .+/.test(f.c), JSON.stringify(f));
+    assert.ok(Array.isArray(f.a || []) && (f.a || []).every((x) => typeof x === 'string' && x.trim()), f.t);
+    const k = f.t.replace(/\s+/g, ''); assert.ok(!seen.has(k), '중복: ' + f.t); seen.add(k);
+    assert.ok(!core.has(k), '핵심 서류와 겹침: ' + f.t);
+  }
+  assert.equal(db.docs.filter((d) => d.p === 'issued').length, ISSUED.length, '배포본에 모두 들어 있다');
+});
+
+test('발급 서류: 첨부서류 이름과 일상어로 찾는다 — 법제처 목록에 없던 서류', () => {
+  const first = (q) => titles(D.search(WITH_ISSUED, q, { limit: 5 }))[0];
+  assert.equal(first('가족관계증명서'), '가족관계증명서');
+  assert.equal(first('주민등록등본'), '주민등록등본');
+  assert.equal(first('주민등록초본'), '주민등록초본');
+  assert.deepEqual(titles(D.search(WITH_ISSUED, '등기사항전부증명서', { limit: 2 })).sort(), ['등기사항전부증명서(법인)', '등기사항전부증명서(부동산)'], '부동산·법인 두 종류가 모두 위에 나온다');
+  assert.equal(first('부동산등기부등본'), '등기사항전부증명서(부동산)', '별칭');
+  assert.equal(first('법인등기부등본'), '등기사항전부증명서(법인)', '별칭');
+  assert.equal(first('ㄱㅈㄱㄱㅈㅁㅅ'), '가족관계증명서', '초성으로도');
+  assert.equal(first('제적'), '제적등본');
+  assert.equal(first('안심상속'), '안심상속 원스톱 서비스(상속인 재산조회)');
+  assert.equal(D.best(WITH_ISSUED, '가족관계증명서를 첨부해야 해요').t, '가족관계증명서', '문장 속 서류명');
+});
+
+test('발급 서류: 자동 완성에는 발급처가 보이고, 법제처 민원서식과 이름이 같으면 발급 서류 한 건만 남는다', () => {
+  const hit = D.search(WITH_ISSUED, '가족관계증명서', { limit: 1 })[0];
+  assert.match(hit.c, /^발급 서류 · .*정부24/);
+  const dup = buildDocsDb({ forms: [{ t: '인감증명서', law: '인감증명법 시행규칙', laws: ['인감증명법 시행규칙'], n: 1, dept: '행정안전부', src: '법령' }, { t: '인감증명 발급대장', law: 'X', n: 1 }] });
+  assert.equal(dup.docs.filter((d) => d.t === '인감증명서').length, 1);
+  assert.equal(dup.docs.find((d) => d.t === '인감증명서').p, 'issued');
+  assert.equal(dup.docs.filter((d) => d.p === 'minwon').length, 1, '이름이 다른 민원서식은 그대로');
 });
 
 test('자모: 입력 도중의 글자도 앞부분이 맞으면 찾는다', () => {

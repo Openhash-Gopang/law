@@ -16,17 +16,23 @@ export function buildDocsDb(opts = {}) {
     for (const a of aliases) if (a.exact ? t === a.match : t.includes(a.match)) out.push(...a.add);
     return [...new Set(out)];
   };
-  const push = (p, pid, c, t, d) => {
+  const push = (p, pid, c, t, d, own = []) => {
     const row = { t, p, pid, c, d: d.length > 120 ? d.slice(0, 119) + '…' : d };
-    const a = aliasFor(t); if (a.length) row.a = a;
+    const a = [...new Set([...own, ...aliasFor(t)])]; if (a.length) row.a = a;
     docs.push(row);
   };
   for (const c of scr.catalog) for (const it of c.items) push('scrivener', 'judicial-scrivener', c.tab, it.t, it.d);
   for (const c of law.catalog) for (const it of c.items) push('lawyer', 'lawyer', c.tab, it.t, it.d);
   for (const f of law.fields) for (const it of f.forms) push('lawyer', f.id, f.name, it.t, it.d);
-  // 법제처 별표·서식(민원서식) — data/law-forms.json 이 있을 때만 합친다(scripts/fetch-law-forms.mjs 가 만든다).
+  // 발급 민원서류(가족관계증명서·등기사항전부증명서 등 첨부서류) — data/issued-docs.json. 법제처 서식 목록에는 신청 서식만 있어 따로 둔다.
+  let issued = opts.issued; if (!issued) { try { issued = read('data/issued-docs.json').docs || []; } catch { issued = []; } }
+  const nk = (s) => String(s).replace(/\s+/g, '').toLowerCase();
+  for (const f of issued) push('issued', 'lawyer', f.c, f.t, f.d || '', f.a || []);
+  const issuedKeys = new Set(issued.map((f) => nk(f.t)));
+  // 법제처 별표·서식(민원서식) — data/law-forms.json 이 있을 때만 합친다(scripts/fetch-law-forms.mjs 가 만든다). 발급 서류와 이름이 같으면 발급 서류만 남긴다.
   let extra = opts.forms; if (!extra) { try { extra = read('data/law-forms.json').forms || []; } catch { extra = []; /* 아직 수집 전 */ } }
   for (const f of extra) {
+    if (issuedKeys.has(nk(f.t))) continue;
     const more = f.n > 1 && f.law ? f.law + ' 외 ' + (f.n - 1) + '건' : (f.law || '민원서식');
     const row = { t: f.t, p: 'minwon', pid: 'lawyer', c: more, d: [f.no, f.dept, f.src].filter(Boolean).join(' · ') };
     const a = aliasFor(f.t); if (a.length) row.a = a;
