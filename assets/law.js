@@ -236,7 +236,6 @@
     }
     return null;
   }
-  function stripFront(md) { return String(md || '').replace(/^---[ \t]*\n[\s\S]*?\n---[ \t]*(?:\n|$)/, '').replace(/^\s+/, ''); }
   function docTitle(md) { var fm = parseFront(md); if (fm.doc_type) return fm.doc_type; var h = md.match(/^#\s+(.+)$/m); return h ? h[1].trim() : '서류 초안'; }
   function two(n) { return (n < 10 ? '0' : '') + n; }
   function fileName(title, d) { return title.replace(/[\\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') + '_' + d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + '.html'; }
@@ -270,6 +269,60 @@
     closeList();
     return out.join('\n');
   }
+  /* ── 서식의 빈 칸 → 입력 칸 ──
+     엔진은 모르는 항목을 [확인 필요: …] 또는 [변호사·법무사 기재: …] 로 남긴다. 이 표시를 찾아 입력 칸으로 바꾸고, 입력한 값은 이 브라우저에서만 서식에 끼워 넣는다(AI 에게 보내지 않는다). */
+  var BLANK_RE = /\[(?:확인 필요|[가-힣]{2,6} 기재)\s*[:：]\s*([^\]]*?)\s*\]/g;
+  var SENSITIVE_RE = /(주민등록번호|주민번호|외국인등록번호|계좌번호|카드번호|비밀번호|여권번호|운전면허번호)/;
+  var NOT_SELF_RE = /(피신청인|피청구인|피고|피상속인|상대|채무자|채권자|임대인|임차인|매도인|매수인|양도인|양수인|대리인|증인|사망|배우자|자녀|부모|법정|변호사|법무사|세무사|변리사|관할|법원|기관|회사|법인|사업장|사업자|상호|소재지|목적물|부동산|토지|건물|사건|대표|피해자|가해자|제출처)/;
+  function cleanLabel(s) { return String(s || '').replace(/[*_`#>|]/g, '').replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').replace(/[:：]\s*$/, '').trim(); }
+  function blankLabel(line, idx, hint) {
+    var bars = [], i, k, m;
+    if (/^\s*\|/.test(line)) {
+      for (i = 0; i < line.length; i++) if (line.charAt(i) === '|') bars.push(i);
+      for (k = 0; k < bars.length - 1; k++) if (idx > bars[k] && idx < bars[k + 1]) break;
+      if (k > 0 && k < bars.length - 1) { var prev = cleanLabel(line.slice(bars[k - 1] + 1, bars[k])); if (prev && !/\[(?:확인 필요|[가-힣]{2,6} 기재)/.test(prev)) return prev; }
+      return hint;
+    }
+    m = line.slice(0, idx).match(/([^:：|\[\]]{1,24})\s*[:：]\s*$/);
+    return (m && cleanLabel(m[1])) || hint;
+  }
+  function stripFront(md) { return String(md || '').replace(/^---[ \t]*\n[\s\S]*?\n---[ \t]*(?:\n|$)/, '').replace(/^\s+/, ''); }
+  function blankKey(label, hint) { return label + '\u2502' + hint; }
+  /** pdvKind("신청인 성명","") → 'name' | 'address' | 'phone' | null — 의뢰인 본인의 인적사항으로 볼 수 있는 칸만. 상대방·부동산 주소·법인 등은 PDV 로 채우지 않는다. */
+  function pdvKind(label, hint) {
+    var t = String(label || '') + ' ' + String(hint || '');
+    if (SENSITIVE_RE.test(t) || NOT_SELF_RE.test(t)) return null;
+    if (/(성명|이름)/.test(t)) return 'name';
+    if (/주소/.test(t)) return 'address';
+    if (/(연락처|전화|휴대)/.test(t)) return 'phone';
+    return null;
+  }
+  /** scanBlanks(md) → [{key,label,hint,kind,sensitive}] — 같은 칸(이름·안내가 같은 것)은 한 칸으로 묶는다. */
+  function scanBlanks(md) {
+    var lines = stripFront(md).split('\n'), seen = {}, out = [], re, m, l, i, label, key;
+    for (i = 0; i < lines.length; i++) {
+      l = lines[i]; re = new RegExp(BLANK_RE.source, 'g');
+      while ((m = re.exec(l))) {
+        label = blankLabel(l, m.index, m[1].trim()); key = blankKey(label, m[1].trim());
+        if (seen[key]) continue;
+        seen[key] = 1;
+        out.push({ key: key, label: label || m[1].trim(), hint: m[1].trim(), kind: pdvKind(label, m[1]), sensitive: SENSITIVE_RE.test(label + ' ' + m[1]) });
+      }
+    }
+    return out;
+  }
+  /** fillBlanks(md, vals, 'text'|'html') — 앞머리를 떼고 빈 칸을 값(text)이나 입력 칸 자리표시(html: \uE000번호\uE001)로 바꾼다. 값이 없으면 text 모드는 원래 표시를 남긴다. */
+  function fillBlanks(md, vals, mode) {
+    var fields = scanBlanks(md), idx = {}, i;
+    for (i = 0; i < fields.length; i++) idx[fields[i].key] = i;
+    return stripFront(md).split('\n').map(function (l) {
+      return l.replace(new RegExp(BLANK_RE.source, 'g'), function (all, hint, off) {
+        var h = hint.trim(), key = blankKey(blankLabel(l, off, h), h), v = vals && vals[key];
+        if (mode === 'html') return '\uE000' + idx[key] + '\uE001';
+        return v ? String(v).replace(/[\r\n]+/g, ' ').replace(/\|/g, '｜').trim() : all;
+      });
+    }).join('\n');
+  }
   function toWebDoc(title, md) {
     return '<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<title>' + esc(title) + '</title><style>' +
@@ -277,7 +330,7 @@
       'h1{font-size:1.5em}h2{font-size:1.25em;margin-top:1.6em}h3{font-size:1.1em}table{border-collapse:collapse;width:100%;margin:12px 0}' +
       'th,td{border:1px solid #bbb;padding:6px 10px;text-align:left;vertical-align:top}th{background:#f2f4f7}table.meta{font-size:.9em;color:#444}' +
       'blockquote{margin:12px 0;padding:8px 14px;border-left:4px solid #ccc;background:#fafafa}code{background:#f2f4f7;padding:1px 4px;border-radius:3px}' +
-      '@media print{body{margin:0;max-width:none}}</style></head><body>\n' + mdToHtml(md) + '\n</body></html>\n';
+      'mark{background:#fde68a;padding:0 2px}@media print{body{margin:0;max-width:none}}</style></head><body>\n' + mdToHtml(md).replace(/\[(?:확인 필요|[가-힣]{2,6} 기재)\s*[:：][^\]]*\]/g, '<mark>$&</mark>') + '\n</body></html>\n';
   }
 
   /* ══════════ 서류 작성 화면 ══════════ */
@@ -295,8 +348,9 @@
 
   function initWrite() {
     var pid = qs.get('persona') || '', fieldName = '';
-    var st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: '', kind: '' };   // kind 'issued' = 발급 서류(초안 대신 발급 안내)
+    var st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: '', kind: '', vals: {}, pdv: {} };   // vals: 칸별 입력값(key→값), pdv: PDV 로 채운 칸. kind 'issued' = 발급 서류(초안 대신 발급 안내)
     var frame = null, ready = false, queue = [], busy = false, readyTimer = null, docsDb = null;
+    var pdvAuto = false, fields = [], drawSig = '', pdvReq = null, pdvStatus = '', chatOpen = false;
 
     /* 어느 엔진으로 쓸지는 화면에 드러내지 않는다 — 주소의 persona(서류 목록이 정해 준 값) → 저장된 이어쓰기 → 서류 DB·질문 내용 순으로 정한다. */
     function boot(db) {
@@ -320,12 +374,100 @@
         try { history.replaceState(null, '', location.pathname); } catch (e) { /* 무시 */ }
         begin(doc, '', doc ? '' : q);
       } else {
-        if (saved && saved.w > 0) st = saved;
+        if (saved && saved.w > 0) { st = saved; st.vals = st.vals || {}; st.pdv = st.pdv || {}; }
         render();
       }
     }
 
-    function save() { st.pid = pid; storeSet('navilaw_write_last', st); }
+    function save() {
+      st.pid = pid;
+      var keep = {}, snap = {}, k, sens = {}, i;
+      for (i = 0; i < fields.length; i++) if (fields[i].sensitive) sens[fields[i].key] = 1;
+      for (k in st) if (Object.prototype.hasOwnProperty.call(st, k)) snap[k] = st[k];
+      for (k in st.vals) if (!sens[k]) keep[k] = st.vals[k];   // 주민등록번호 등은 이 화면을 닫으면 사라지게 저장하지 않는다
+      snap.vals = keep;
+      storeSet('navilaw_write_last', snap);
+    }
+    var saveT = null;
+    function saveSoon() { if (saveT) clearTimeout(saveT); saveT = setTimeout(function () { saveT = null; save(); }, 400); }
+
+    /* ── 입력 칸 ── */
+    function valOf(f) { return (st.vals && st.vals[f.key]) || ''; }
+    function draftHtml() {
+      var html = mdToHtml(fillBlanks(st.md, null, 'html'));
+      return html.replace(/\uE000(\d+)\uE001/g, function (all, n) {
+        var f = fields[+n]; if (!f) return '';
+        var isPdv = !!(st.pdv && st.pdv[f.key]);
+        return '<input type="text" class="fld' + (isPdv ? ' pdv' : '') + (valOf(f) ? ' done' : '') + '" data-i="' + n + '" aria-label="' + esc(f.label) + '" placeholder="' + esc(f.hint || f.label) + '" value="' + esc(valOf(f)) + '"' +
+          (f.sensitive ? ' autocomplete="off"' : '') + '>' + (isPdv ? '<span class="fld-badge" title="혼디 PDV에서 가져온 값입니다. 맞는지 확인해 주십시오.">PDV</span>' : '');
+      });
+    }
+    function fillCount() { var n = 0, i; for (i = 0; i < fields.length; i++) if (valOf(fields[i])) n++; return n; }
+    function updateFill() {
+      var bar = $('fillbar'), has = !!st.md && st.kind !== 'issued' && fields.length > 0;
+      bar.hidden = !has; if (!has) return;
+      var n = fillCount(), sens = fields.some(function (f) { return f.sensitive; });
+      $('fillSum').textContent = '입력할 항목 ' + fields.length + '개 중 ' + n + '개 입력' + (n === fields.length ? ' — 모두 입력했습니다.' : '. 아래 서식의 빈 칸에 직접 쓰시면 됩니다.') + (sens ? ' 주민등록번호 등은 이 화면을 닫으면 지워지며 저장되지 않습니다.' : '');
+      var wants = pdvWants(), ac = findAc();
+      $('pdvBtn').hidden = !(ac && wants.length);
+      $('pdvNote').textContent = pdvStatus || (ac ? (wants.length ? '내 AI 비서의 PDV에 있는 성명·연락처·주소를 가져올 수 있습니다.' : '') : '혼디 이용자가 아니면 빈 칸에 직접 입력해 주십시오.');
+    }
+    function onField(e) {
+      var t = e.target; if (!t.classList || !t.classList.contains('fld')) return;
+      var f = fields[+t.getAttribute('data-i')]; if (!f) return;
+      st.vals[f.key] = t.value; if (st.pdv) delete st.pdv[f.key];
+      t.classList.toggle('done', !!t.value); t.classList.remove('pdv');
+      var b = t.nextSibling; if (b && b.classList && b.classList.contains('fld-badge')) b.remove();
+      var same = $('draft').querySelectorAll('.fld'), i;
+      for (i = 0; i < same.length; i++) if (same[i] !== t && fields[+same[i].getAttribute('data-i')] === f) { same[i].value = t.value; same[i].classList.toggle('done', !!t.value); }
+      updateFill(); saveSoon();
+    }
+    function filledMd() { return fillBlanks(st.md, st.vals, 'text'); }
+
+    /* ── 혼디 PDV (의뢰인의 AI 비서에게 요청) ── */
+    var AC_ORIGINS = [HONDI, 'https://www.hondi.net'], PDV_NAME = { name: '이름', phone: '연락처', address: '주소' };
+    function findAc() {
+      var o = ''; try { o = sessionStorage.getItem('navilaw_ac') || ''; } catch (e) { o = ''; }
+      try { if (!o || !window.opener || window.opener.closed) return ''; } catch (e) { return ''; }
+      return AC_ORIGINS.indexOf(o) >= 0 ? o : '';
+    }
+    function pdvWants() { return fields.filter(function (f) { return f.kind && !valOf(f); }); }
+    function pdvFill(auto) {
+      var ac = findAc(), want = pdvWants(), names = [];
+      if (!ac || !want.length || pdvReq) return;
+      want.forEach(function (f) { var n = PDV_NAME[f.kind]; if (names.indexOf(n) < 0) names.push(n); });
+      var rid = 'law-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      pdvReq = { rid: rid, ac: ac, want: want, timer: setTimeout(function () { if (pdvReq && pdvReq.rid === rid) { pdvReq = null; pdvStatus = 'AI 비서의 응답이 없어 가져오지 못했습니다. 직접 입력해 주십시오.'; updateFill(); } }, 180000) };
+      pdvStatus = 'AI 비서에게 ' + names.join('·') + ' 정보를 요청했습니다. 비서 창에서 허용해 주십시오…'; updateFill();
+      try { window.opener.postMessage({ type: 'GWP_PDV_REQUEST', request_id: rid, requesting_sp: 'navi-law', fields: names, reason: '서류 서식의 인적사항 칸을 채우기 위해' }, ac); }
+      catch (e) { clearTimeout(pdvReq.timer); pdvReq = null; pdvStatus = '비서에게 요청하지 못했습니다. 직접 입력해 주십시오.'; updateFill(); }
+    }
+    function onPdv(e) {
+      var d = e.data;
+      if (!pdvReq || !d || d.type !== 'GWP_PDV_RESPONSE' || d.request_id !== pdvReq.rid) return;
+      if (e.origin !== pdvReq.ac || e.source !== window.opener) return;
+      var req = pdvReq; pdvReq = null; clearTimeout(req.timer);
+      if (!d.approved || !d.values) { pdvStatus = '정보 제공이 허용되지 않았습니다. 빈 칸에 직접 입력해 주십시오.'; updateFill(); return; }
+      var n = 0;
+      req.want.forEach(function (f) {
+        var v = d.values[PDV_NAME[f.kind]];
+        if (v && typeof v === 'object') v = v.value;
+        if ((typeof v === 'string' || typeof v === 'number') && String(v).trim() && !valOf(f)) { st.vals[f.key] = String(v).trim(); st.pdv[f.key] = 1; n++; }
+      });
+      pdvStatus = n ? 'PDV에서 ' + n + '개 항목을 가져왔습니다. 맞는지 확인해 주십시오. 나머지는 직접 입력해 주십시오.' : 'PDV에 해당 정보가 없습니다. 직접 입력해 주십시오.';
+      drawSig = ''; save(); render();
+    }
+
+    /* ── 떠 있는 대화창 ── */
+    function setChat(open) {
+      chatOpen = !!open;
+      $('chatPanel').classList.toggle('open', chatOpen);
+      $('chatPanel').setAttribute('aria-hidden', chatOpen ? 'false' : 'true');
+      $('chatFab').setAttribute('aria-expanded', chatOpen ? 'true' : 'false');
+      $('chatFab').setAttribute('aria-label', chatOpen ? '대화창 닫기' : '대화창 열기');
+      if (chatOpen) { $('chatDot').hidden = true; try { $('chatClose').focus(); } catch (e) { /* 무시 */ } }
+      else if (document.activeElement && $('chatPanel').contains(document.activeElement)) { try { $('chatFab').focus(); } catch (e) { /* 무시 */ } }
+    }
     function render() {
       var ph = phaseOf(st.w || 1), started = st.w > 0, issued = st.kind === 'issued';
       $('phases').style.display = issued ? 'none' : '';   // .phases 는 display:grid 라 hidden 속성이 먹지 않는다
@@ -335,13 +477,21 @@
         return '<div class="phase ' + cls + '">' + (i + 1) + '. ' + esc(n) + '</div>';
       }).join('');
       var hasDraft = !!st.md && !issued;
+      fields = hasDraft ? scanBlanks(st.md) : [];
       if (issued) {
         $('draft').innerHTML = st.rest ? mdToHtml(st.rest) : '<div class="empty">' + (busy ? 'AI가 발급 안내를 작성하는 중입니다…' : '발급 안내가 여기에 나타납니다.') + '</div>';
-        $('draftTitle').textContent = '발급 안내';
+        $('draftTitle').textContent = '발급 안내'; drawSig = '';
       } else {
-        $('draft').innerHTML = hasDraft ? mdToHtml(st.md) : '<div class="empty">' + (busy ? 'AI가 초안을 작성하는 중입니다…' : '서류를 정하면 여기에 초안이 나타납니다.') + '</div>';
+        var sig = hasDraft ? 'd|' + st.md + '|' + JSON.stringify(st.pdv || {}) : 'e|' + busy;
+        if (sig !== drawSig) {
+          var act = document.activeElement, ai = act && act.classList && act.classList.contains('fld') && $('draft').contains(act) ? act.getAttribute('data-i') : null, caret = ai !== null ? act.selectionStart : 0;
+          $('draft').innerHTML = hasDraft ? draftHtml() : '<div class="empty">' + (busy ? 'AI가 초안을 작성하는 중입니다…' : '서류를 정하면 여기에 초안이 나타납니다.') + '</div>';
+          drawSig = sig;
+          if (ai !== null) { var again = $('draft').querySelector('.fld[data-i="' + ai + '"]'); if (again) { try { again.focus(); again.setSelectionRange(caret, caret); } catch (e) { /* 무시 */ } } }
+        }
         $('draftTitle').textContent = hasDraft ? st.title : '초안';
       }
+      updateFill();
       var rest = $('blanks');
       if (issued) rest.hidden = true;
       else if (st.rest) { rest.hidden = false; $('blanksTitle').textContent = ph <= 2 ? '남은 빈 칸과 수정·보완' : '안내'; $('blanksBody').innerHTML = mdToHtml(st.rest); }
@@ -357,6 +507,7 @@
       if (issued && st.rest) a.push('<button type="button" class="btn sm line" data-act="copy">복사</button>');
       $('actions').innerHTML = a.join('');
       $('busy').hidden = !busy;
+      $('chatFab').classList.toggle('busy', busy);
       $('startBox').hidden = started;
       $('startSum').hidden = !started;
       $('startSumText').textContent = st.doc ? '서류: ' + st.doc + (issued ? ' · 발급 안내' : '') : '서류 작성 중';
@@ -368,20 +519,24 @@
       if (ready) { post(text); return; }
       queue.push(text); setBusy(true);
       if (!readyTimer) readyTimer = setTimeout(function () {
-        if (!ready) { setBusy(false); $('connWarn').hidden = false; }
+        if (!ready) { setBusy(false); $('connWarn').hidden = false; setChat(true); }
       }, 15000);
     }
     function flush() { if (readyTimer) { clearTimeout(readyTimer); readyTimer = null; } $('connWarn').hidden = true; while (queue.length) post(queue.shift()); }
 
     function onReply(text) {
-      if (st.kind === 'issued') { st.rest = cleanRest(text, ''); st.at = Date.now(); save(); setBusy(false); return; }   // 발급 안내는 답변 전체를 안내 칸에 보여 준다
+      if (st.kind === 'issued') { st.rest = cleanRest(text, ''); st.at = Date.now(); save(); setBusy(false); if (!chatOpen) $('chatDot').hidden = false; return; }   // 발급 안내는 답변 전체를 안내 칸에 보여 준다
       var m = STATUS_RE.exec(text), ex = extractDoc(text);
       if (m) st.w = parseInt(m[1], 10);
       else if (ex && st.w < 6) st.w = 6;
       if (ex) { st.md = ex.md; st.title = docTitle(ex.md); st.at = Date.now(); }
       st.rest = cleanRest(text, ex ? ex.raw : '');
       save(); setBusy(false);
-      if (ex) { $('draftPane').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      if (ex) {
+        if (!chatOpen) $('chatDot').hidden = false;
+        $('draftPane').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (!pdvAuto) { pdvAuto = true; pdvFill(true); }   // 처음 초안이 나오면 한 번만 AI 비서에게 인적사항을 요청한다
+      }
     }
 
     function startMessage(doc, memo, q) {
@@ -391,7 +546,7 @@
     }
     function begin(doc, memo, q) {
       var N = window.NaviLawDocs, it = !q && doc && N.findIssued ? N.findIssued(docsDb, doc) : (q && N.findIssuedAsk ? N.findIssuedAsk(docsDb, q) : null);   // 받아서 첨부하는 서류는 초안이 아니라 발급 안내로 시작한다 — 서류명만 고른 경우와 "…떼는 법" 같은 발급 문의 문장
-      st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '' };
+      st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '', vals: {}, pdv: {} }; drawSig = ''; pdvStatus = '';
       save(); render(); send(it ? N.issuedAsk(it, memo, q) : startMessage(doc, memo, q));
     }
 
@@ -401,23 +556,30 @@
         if (e.data.type === 'expert-embed-ready') { ready = true; flush(); }
         else if (e.data.type === 'expert-embed-reply') onReply(String(e.data.text || ''));
       });
+      window.addEventListener('message', onPdv);
+      $('draft').addEventListener('input', onField);
+      $('pdvBtn').addEventListener('click', function () { pdvStatus = ''; pdvFill(false); });
+      $('chatFab').addEventListener('click', function () { setChat(!chatOpen); });
+      $('chatClose').addEventListener('click', function () { setChat(false); });
+      $('connOpen').addEventListener('click', function () { setChat(true); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && chatOpen) setChat(false); });
       $('startForm').addEventListener('submit', function (e) {
         e.preventDefault();
         var doc = $('fDoc').value.trim(), memo = $('fMemo').value.trim();
         if (!doc && !memo) { $('fDoc').focus(); toast('작성할 서류를 적어 주세요.'); return; }
         begin(doc, memo, doc ? '' : memo);
       });
-      $('newDoc').addEventListener('click', function () { st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: pid, kind: '' }; save(); $('fDoc').value = ''; $('fMemo').value = ''; render(); $('fDoc').focus(); });
+      $('newDoc').addEventListener('click', function () { st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: pid, kind: '', vals: {}, pdv: {} }; drawSig = ''; pdvStatus = ''; save(); $('fDoc').value = ''; $('fMemo').value = ''; render(); $('fDoc').focus(); });
       $('actions').addEventListener('click', function (e) {
         var b = e.target.closest('button[data-act]'); if (!b) return;
         var act = b.getAttribute('data-act');
         if (act === 'download') {
-          var blob = new Blob([toWebDoc(st.title, st.md)], { type: 'text/html;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+          var blob = new Blob([toWebDoc(st.title, filledMd())], { type: 'text/html;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
           a.href = url; a.download = fileName(st.title, new Date(st.at || Date.now())); document.body.appendChild(a); a.click(); document.body.removeChild(a);
           setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         } else if (act === 'copy') {
           var done = function () { toast('복사했습니다.'); };
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(st.kind === 'issued' ? st.rest : stripFront(st.md)).then(done, function () { toast('복사하지 못했습니다.'); });
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(st.kind === 'issued' ? st.rest : filledMd()).then(done, function () { toast('복사하지 못했습니다.'); });
           else toast('이 브라우저에서는 복사할 수 없습니다. 내려받기를 이용해 주세요.');
         } else if (act === 'next') send('W-6 작성된 서류를 검증했고 제출 준비를 진행하겠습니다. 승인합니다.');
         else if (act === 'submitted') send('W-7 제출을 직접 마쳤습니다. W-8로 진행해 주세요.');
@@ -438,10 +600,14 @@
     if (b) b.addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } box.remove(); });
   }
 
+  /* 나만의 AI 비서(hondi.net)가 ?gwp=1&origin=… 로 연 창이면 그 출처를 기억한다 — 이후 다른 쪽으로 이동해도 window.opener 로 비서와 이야기할 수 있다. */
+  (function captureAc() {
+    try { var o = qs.get('origin') || ''; if (qs.get('gwp') === '1' && (o === HONDI || o === 'https://www.hondi.net')) sessionStorage.setItem('navilaw_ac', o); } catch (e) { /* 무시 */ }
+  })();
   var page = document.body.getAttribute('data-page');
   initPromo();
   if (page === 'home') initHome();
   else if (page === 'docs') initDocs();
   else if (page === 'write') initWrite();
-  window.NaviLaw = { go: function (u) { location.href = u; }, route: route, pickEngine: pickEngine, attachSuggest: attachSuggest, extractDoc: extractDoc, mdToHtml: mdToHtml, cleanRest: cleanRest, phaseOf: phaseOf, STATUS_RE: STATUS_RE };
+  window.NaviLaw = { scanBlanks: scanBlanks, fillBlanks: fillBlanks, pdvKind: pdvKind, go: function (u) { location.href = u; }, route: route, pickEngine: pickEngine, attachSuggest: attachSuggest, extractDoc: extractDoc, mdToHtml: mdToHtml, cleanRest: cleanRest, phaseOf: phaseOf, STATUS_RE: STATUS_RE };
 })();
