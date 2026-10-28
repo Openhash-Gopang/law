@@ -11,7 +11,7 @@ import { buildDocsDb, serialize } from '../scripts/build-docs-index.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const db = JSON.parse(read('data/docs.json'));           // 실제 배포본(법제처 민원서식 포함)
-const CORE = buildDocsDb({ forms: [], issued: [] });        // 핵심 서류만 — 수집·발급 서류 데이터와 무관하게 검색 동작을 시험한다
+const CORE = buildDocsDb({ forms: [], issued: [], court: [] });  // 핵심 서류만 — 수집·발급·법원 양식 데이터와 무관하게 검색 동작을 시험한다
 const win = {}; vm.runInNewContext(read('assets/docs-search.js'), { window: win });
 const D = win.NaviLawDocs, idx = D.createIndex(CORE);
 const titles = (r) => r.map((e) => e.t);
@@ -27,14 +27,14 @@ test('서류 DB: 핵심 서류는 법무사 98 + 변호사 공통 19 + 세부 �
   assert.equal(CORE.fields.length, 46);
   assert.ok(!CORE.docs.some((d) => d.t === '유의'));
   for (const d of CORE.docs) assert.ok(d.t && d.p && d.pid && d.c, JSON.stringify(d));
-  assert.equal(db.docs.filter((d) => d.p !== 'minwon' && d.p !== 'issued').length, 399, '배포본의 핵심 서류 수');
+  assert.equal(db.docs.filter((d) => !['minwon', 'issued', 'court'].includes(d.p)).length, 399, '배포본의 핵심 서류 수');
   assert.equal(db.fields.length, 46);
   for (const d of db.docs.filter((x) => x.p === 'minwon')) assert.ok(d.t && d.c, JSON.stringify(d));
 });
 
 // 발급 민원서류 — 등기·소송에 첨부하는 가족관계증명서 같은 서류. 법제처 서식 목록에는 이름이 없어 data/issued-docs.json 에 따로 둔다.
 const ISSUED = JSON.parse(read('data/issued-docs.json')).docs;
-const WITH_ISSUED = D.createIndex(buildDocsDb({ forms: [] }));
+const WITH_ISSUED = D.createIndex(buildDocsDb({ forms: [], court: [] }));
 test('발급 서류: 모든 항목에 서류명·발급처·안내가 있고, 이름이 겹치지 않으며 핵심 서류와도 겹치지 않는다', () => {
   assert.ok(ISSUED.length >= 40, '발급 서류 ' + ISSUED.length + '건');
   const seen = new Set(), core = new Set(CORE.docs.map((d) => d.t.replace(/\s+/g, '')));
@@ -52,7 +52,8 @@ test('발급 서류: 첨부서류 이름과 일상어로 찾는다 — 법제처
   assert.equal(first('가족관계증명서'), '가족관계증명서');
   assert.equal(first('주민등록등본'), '주민등록등본');
   assert.equal(first('주민등록초본'), '주민등록초본');
-  assert.deepEqual(titles(D.search(WITH_ISSUED, '등기사항전부증명서', { limit: 2 })).sort(), ['등기사항전부증명서(법인)', '등기사항전부증명서(부동산)'], '부동산·법인 두 종류가 모두 위에 나온다');
+  assert.deepEqual(Array.from(titles(D.search(WITH_ISSUED, '등기사항전부증명서', { limit: 2 }))).sort(),   // vm 안에서 만든 배열은 Array.from 으로 옮겨야 deepEqual 이 맞는다
+     ['등기사항전부증명서(법인)', '등기사항전부증명서(부동산)'], '부동산·법인 두 종류가 모두 위에 나온다');
   assert.equal(first('부동산등기부등본'), '등기사항전부증명서(부동산)', '별칭');
   assert.equal(first('법인등기부등본'), '등기사항전부증명서(법인)', '별칭');
   assert.equal(first('ㄱㅈㄱㄱㅈㅁㅅ'), '가족관계증명서', '초성으로도');
