@@ -16,8 +16,7 @@
     <a class="brand" href="./">나비로 Navi Law</a>
     <nav class="nav" aria-label="주 메뉴">
       <a href="./">홈</a>
-      <a href="lawyer.html">변호사</a>
-      <a href="scrivener.html">법무사</a>
+      <a href="docs.html">서류 목록</a>
     </nav>
     <div class="head-right">
       <a class="ext" href="https://hondi.net" target="_blank" rel="noopener">혼디넷</a>
@@ -26,24 +25,16 @@
   </div>
 </header>
 <main class="wrap">
-  <p class="small" style="margin:0 0 6px"><a id="back" href="./">← 서류 목록</a></p>
+  <p class="small" style="margin:0 0 6px"><a id="back" href="docs.html">← 서류 목록</a></p>
   <h1 id="h1">서류 작성</h1>
 
-  <section id="chooser" class="start" hidden>
-    <h2 style="font-size:20px">어느 보조 AI로 작성할까요</h2>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <a class="btn green" href="write.html?persona=judicial-scrivener">법무사 보조 AI</a>
-      <a class="btn navy" href="write.html?persona=lawyer">변호사 보조 AI</a>
-    </div>
-  </section>
-
-  <div id="app" hidden>
+  <div id="app">
     <div class="phases" id="phases" aria-label="진행 단계"></div>
 
     <section id="startBox" class="start" aria-label="서류 정하기">
       <form id="startForm" style="display:grid;gap:12px">
         <label>작성할 서류
-          <input id="fDoc" maxlength="80" autocomplete="off">
+          <input id="fDoc" maxlength="80" autocomplete="off" placeholder="예: 소유권이전등기신청서(매매), 답변서, 내용증명">
         </label>
         <label>알고 있는 내용 (선택)
           <textarea id="fMemo" rows="3" maxlength="1500" placeholder="알고 있는 만큼만 쓰세요. 비워 두면 빈 칸으로 남깁니다. 주민등록번호·계좌번호는 쓰지 마세요."></textarea>
@@ -71,16 +62,16 @@
       <section class="pane" aria-labelledby="chatH">
         <h2 id="chatH">수정·보완은 여기에 말씀하십시오</h2>
         <p class="small">아는 칸만 알려 주시거나 고칠 곳을 문장으로 쓰시면 바로 반영합니다. 대화창이 로그인을 요구하면 로그인해 주세요.</p>
-        <iframe id="chatFrame" class="chat-frame" title="보조 AI 대화" allow="microphone; camera"></iframe>
+        <iframe id="chatFrame" class="chat-frame" title="서류 보조 AI 대화" allow="microphone; camera"></iframe>
       </section>
     </div>
-    <p class="notice warn">AI가 쓴 초안입니다. 승인·서명·기명날인·제출·수수료 납부는 자격자 또는 본인이 직접 하며, 이 화면의 버튼은 다음 단계로 넘어가겠다는 확인일 뿐 법적 검토가 아닙니다. dpaper 연동은 아직 되지 않아 제출은 기관이 정한 방법으로 직접 합니다.</p>
+    <p class="notice warn">AI가 쓴 초안입니다. 승인·서명·기명날인·제출·수수료 납부는 사람 전문가(또는 본인)가 직접 하며, 자격·업무 범위 등 법적 제한의 확인과 책임도 사람 전문가에게 있습니다. 이 화면의 버튼은 다음 단계로 넘어가겠다는 확인일 뿐 법적 검토가 아닙니다. dpaper 연동은 아직 되지 않아 제출은 기관이 정한 방법으로 직접 합니다.</p>
   </div>
 </main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <footer class="foot">
   <div class="foot-in">
-    <p style="margin:0">나비로 Navi Law는 법률 자문이나 대리를 제공하지 않는 보조 도구입니다. 변호사법·법무사법에 따라 서명·기명날인·제출·납부는 자격자 또는 본인이 직접 합니다.</p>
+    <p style="margin:0">나비로 Navi Law는 법률 자문이나 대리를 제공하지 않는 보조 도구입니다. 서명·기명날인·제출·납부와 자격·업무 범위 등 법적 제한의 확인은 사람 전문가가 직접 하며, 그 책임도 사람 전문가에게 있습니다.</p>
     <div class="foot-links">
       <a href="https://hondi.net" target="_blank" rel="noopener">혼디넷</a>
       <a href="https://klaw.hondi.net" target="_blank" rel="noopener">K-Law 가상 판결</a>
@@ -89,6 +80,7 @@
   </div>
 </footer>
 <script src="https://hondi.net/auth/user-badge.js?v=20261028" defer></script>
+<script src="assets/docs-search.js"></script>
 <script src="assets/law.js"></script>
 </body>
 </html>

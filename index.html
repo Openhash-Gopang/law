@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>나비로 Navi Law — 변호사·법무사 업무 보조 AI</title>
-<meta name="description" content="변호사·법무사와 사무직원이 서류 초안을 먼저 받고 고쳐 쓰는 법률 업무 보조 AI">
+<title>나비로 Navi Law — 법률 서류 초안 AI</title>
+<meta name="description" content="변호사·법무사와 사무직원이 서류 초안을 먼저 받고 고쳐 쓰는 법률 서류 보조 AI">
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
@@ -16,8 +16,7 @@
     <a class="brand" href="./">나비로 Navi Law</a>
     <nav class="nav" aria-label="주 메뉴">
       <a href="./" aria-current="page">홈</a>
-      <a href="lawyer.html">변호사</a>
-      <a href="scrivener.html">법무사</a>
+      <a href="docs.html">서류 목록</a>
     </nav>
     <div class="head-right">
       <a class="ext" href="https://hondi.net" target="_blank" rel="noopener">혼디넷</a>
@@ -27,35 +26,29 @@
 </header>
 <main class="wrap">
   <h1>법률 서류, 초안부터 받으십시오</h1>
-  <p class="sub">작성할 서류를 말씀하시면 AI가 먼저 초안을 씁니다. 모르는 칸은 비워 두니, 아는 만큼만 채워 고치시면 됩니다.</p>
+  <p class="sub">작성할 서류를 말씀하시면 AI가 먼저 초안을 씁니다. 모르는 칸은 비워 두니, 아는 만큼만 채워 고치시면 됩니다. 직역을 가리지 않고 모든 서류를 씁니다.</p>
   <form id="askForm" class="ask" role="search">
-    <label for="askInput" class="sr" style="position:absolute;left:-9999px">작성할 서류 또는 사건</label>
-    <input type="text" id="askInput" maxlength="600" placeholder="예: 소유권이전등기 신청서를 작성하려고 합니다" autocomplete="off">
+    <label for="askInput" class="sr">작성할 서류 또는 사건</label>
+    <div class="sug-wrap">
+      <input type="text" id="askInput" maxlength="600" placeholder="예: 소유권이전등기 신청서, 답변서, 내용증명" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugList">
+      <ul id="sugList" class="sug" role="listbox" aria-label="서류 제안" hidden></ul>
+    </div>
     <button type="submit" class="btn">초안 작성</button>
   </form>
+  <div id="sugStatus" class="sr" role="status" aria-live="polite"></div>
   <div class="chips" aria-label="예시">
     <button type="button" class="chip" data-q="근저당권 말소등기 신청서 작성">근저당 말소 신청서</button>
     <button type="button" class="chip" data-q="개인회생 신청 서류 작성">개인회생 신청 서류</button>
+    <button type="button" class="chip" data-q="답변서 작성">답변서</button>
     <button type="button" class="chip" data-q="내용증명 작성">내용증명</button>
   </div>
-  <p id="routeHint" class="notice warn" hidden>어느 쪽으로 열지 정하지 못했습니다. 아래에서 고르시면 입력하신 내용을 그대로 가져갑니다.</p>
-  <div class="notice">AI는 초안을 만듭니다. 검토·승인·서명·제출은 사람이 합니다.</div>
+  <div class="notice">AI는 초안을 만듭니다. 검토·승인·서명·제출은 사람 전문가가 하고, 자격·업무 범위 등 법적 제한의 확인과 책임도 사람 전문가에게 있습니다.</div>
 
-  <div class="doors">
-    <section class="door law" data-persona="lawyer">
-      <h2>변호사 보조 AI</h2>
-      <p>소송·수사 대응·계약·법률 의견 서류의 검토용 초안을 만듭니다.</p>
-      <div class="count">세부 분야 46개 · 서류 19종</div>
-      <a class="btn navy" href="lawyer.html">변호사 보조 AI 열기</a>
-    </section>
-    <section class="door scr" data-persona="scrivener">
-      <h2>법무사 보조 AI</h2>
-      <p>등기·공탁·경매·개인회생·법원 제출 서류를 작성하고 제출 준비까지 돕습니다.</p>
-      <div class="count">12개 분야 · 서류 99종</div>
-      <a class="btn green" href="scrivener.html">법무사 보조 AI 열기</a>
-    </section>
-  </div>
-  <p class="hint">서류를 만들어야 하면 법무사, 사건의 쟁점을 따져야 하면 변호사를 고르십시오.</p>
+  <section class="home-docs" aria-labelledby="hd">
+    <h2 id="hd">서류 399건, 분야 46개</h2>
+    <p class="small">등기·공탁·경매·개인회생부터 소송·수사 대응·계약·법률 의견 서류까지 한곳에서 찾습니다. 입력창에 몇 글자만 쳐도 서류가 제안됩니다.</p>
+    <a class="btn line" href="docs.html">서류 목록 보기</a>
+  </section>
 
   <div class="steps3">
     <div><b>1. 서류를 말씀하십시오</b>입력창이나 서류 목록으로 시작합니다.</div>
@@ -65,7 +58,7 @@
 </main>
 <footer class="foot">
   <div class="foot-in">
-    <p style="margin:0">나비로 Navi Law는 법률 자문이나 대리를 제공하지 않는 보조 도구입니다. 변호사법·법무사법에 따라 서명·기명날인·제출·납부는 자격자 또는 본인이 직접 합니다.</p>
+    <p style="margin:0">나비로 Navi Law는 법률 자문이나 대리를 제공하지 않는 보조 도구입니다. 서명·기명날인·제출·납부와 자격·업무 범위 등 법적 제한의 확인은 사람 전문가가 직접 하며, 그 책임도 사람 전문가에게 있습니다.</p>
     <div class="foot-links">
       <a href="https://hondi.net" target="_blank" rel="noopener">혼디넷</a>
       <a href="https://klaw.hondi.net" target="_blank" rel="noopener">K-Law 가상 판결</a>
@@ -74,6 +67,7 @@
   </div>
 </footer>
 <script src="https://hondi.net/auth/user-badge.js?v=20261028" defer></script>
+<script src="assets/docs-search.js"></script>
 <script src="assets/law.js"></script>
 </body>
 </html>

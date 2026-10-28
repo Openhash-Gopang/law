@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>서류 목록 — 나비로 Navi Law</title>
+<meta name="description" content="등기·공탁·경매·개인회생·소송·수사 대응·계약·법률 의견 서류 목록">
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="assets/law.css">
+</head>
+<body data-page="docs">
+<header class="head">
+  <div class="head-in">
+    <a class="brand" href="./">나비로 Navi Law</a>
+    <nav class="nav" aria-label="주 메뉴">
+      <a href="./">홈</a>
+      <a href="docs.html" aria-current="page">서류 목록</a>
+    </nav>
+    <div class="head-right">
+      <a class="ext" href="https://hondi.net" target="_blank" rel="noopener">혼디넷</a>
+      <span class="hondi-user-slot" data-hondi-user-slot="light" style="flex:none;display:flex;align-items:center"></span>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <h1>서류 목록</h1>
+  <p class="sub">서류를 고르면 AI가 초안을 먼저 씁니다. 목록에 없는 서류는 입력창에 말씀하십시오.</p>
+  <form id="askForm" class="ask" role="search">
+    <label for="askInput" class="sr">작성할 서류</label>
+    <div class="sug-wrap">
+      <input type="text" id="askInput" maxlength="600" placeholder="작성할 서류를 말씀하십시오" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugList">
+      <ul id="sugList" class="sug" role="listbox" aria-label="서류 제안" hidden></ul>
+    </div>
+    <button type="submit" class="btn">초안 작성</button>
+  </form>
+  <div id="sugStatus" class="sr" role="status" aria-live="polite"></div>
+  <div class="notice">AI는 초안을 만듭니다. 검토·승인·서명·제출은 사람 전문가가 하고, 자격·업무 범위 등 법적 제한의 확인과 책임도 사람 전문가에게 있습니다.</div>
+  <section aria-labelledby="fieldsH">
+    <h2 id="fieldsH">분야별 서류</h2>
+    <p class="small">분야를 고르면 그 분야에 맞춘 서류 목록과 기한 참고가 나옵니다.</p>
+    <div id="fieldsBox"></div>
+    <div id="fieldDetail"></div>
+  </section>
+  <section aria-labelledby="listH">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:end;margin-top:36px">
+      <div><h2 id="listH" style="margin:0">전체 서류</h2><p class="small" id="countLine" style="margin:0"></p></div>
+      <a class="btn sm line" id="otherDoc" href="write.html">목록에 없는 서류 작성하기</a>
+    </div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="서류 분류"></div>
+    <div id="listBox"><div class="empty">서류 목록을 불러오는 중입니다…</div></div>
+  </section>
+</main>
+<footer class="foot">
+  <div class="foot-in">
+    <p style="margin:0">나비로 Navi Law는 법률 자문이나 대리를 제공하지 않는 보조 도구입니다. 서명·기명날인·제출·납부와 자격·업무 범위 등 법적 제한의 확인은 사람 전문가가 직접 하며, 그 책임도 사람 전문가에게 있습니다.</p>
+    <div class="foot-links">
+      <a href="https://hondi.net" target="_blank" rel="noopener">혼디넷</a>
+      <a href="https://klaw.hondi.net" target="_blank" rel="noopener">K-Law 가상 판결</a>
+      <a href="https://github.com/Openhash-Gopang/law" target="_blank" rel="noopener">GitHub · GPL v3.0</a>
+    </div>
+  </div>
+</footer>
+<script src="https://hondi.net/auth/user-badge.js?v=20261028" defer></script>
+<script src="assets/docs-search.js"></script>
+<script src="assets/law.js"></script>
+</body>
+</html>
