@@ -241,6 +241,21 @@
   function takeAttach() {
     try { var a = JSON.parse(sessionStorage.getItem(ATT_KEY) || 'null'); sessionStorage.removeItem(ATT_KEY); return a && (a.names || []).length ? a : null; } catch (e) { return null; }
   }
+  /* 서류 초안을 처음 청하는 말 — 작성 화면과 홈(바로 작성)이 함께 쓴다. */
+  function draftStartMessage(doc, memo, q) {
+    var tail = ' 인사나 질문 없이 지금 바로 초안 전체를 작성해 주세요. 의뢰인의 성명·주소·전화번호·이메일·주민등록번호는 의뢰인의 PDV에서 자동으로 채워지므로 [확인 필요: 항목명] 빈 칸으로 두고, 그 밖에 모르는 항목은 묻지 말고 빈 칸으로 남긴 뒤, 초안 아래 빈 칸 표로 알려 주세요.';
+    if (q) return '다음 요청에 맞는 서류 초안을 작성해 주세요: ' + q + '.' + tail;
+    return '「' + doc + '」 초안을 작성해 주세요.' + (memo ? ' 알고 있는 내용: ' + memo + '.' : '') + tail;
+  }
+  var NUDGE = function (doc) { return '질문하지 말고 지금 바로 「' + (doc || '요청한 서류') + '」 초안 전체를 ~~~markdown 코드 블록(앞머리 포함)으로 작성해 주세요. 모르는 항목은 [확인 필요: 항목명] 빈 칸으로 두세요.'; };
+  /** 빈 칸 자리표(\uE000n\uE001)를 입력 칸으로 바꾼 초안 HTML. 작성 화면과 홈이 같은 모양을 쓴다. */
+  function fieldsHtml(md, fields, vals, pdv) {
+    return mdToHtml(fillBlanks(md, null, 'html')).replace(/\uE000(\d+)\uE001/g, function (all, n) {
+      var f = fields[+n]; if (!f) return '';
+      var v = (vals && vals[f.key]) || '', isPdv = !!(pdv && pdv[f.key]);
+      return '<input type="text" class="fld' + (isPdv ? ' pdv' : '') + (v ? ' done' : '') + '" data-i="' + n + '" aria-label="' + esc(f.label) + '" placeholder="' + esc(f.hint || f.label) + '" value="' + esc(v) + '"' + (f.sensitive ? ' autocomplete="off"' : '') + '>' + (isPdv ? '<span class="fld-badge" title="의뢰인의 PDV에서 가져온 값입니다. 맞는지 확인해 주십시오.">PDV</span>' : '');
+    });
+  }
   /* 시험용(시뮬레이션) 의뢰인 — 실제로는 의뢰인의 PDV 에서 가져온다. 작성 화면과 홈의 서류 미리보기가 함께 쓴다. */
   var SIM_CLIENT = { name: '도 영민', address: '제주시 한림읍 금능남로 3', phone: '010-9662-7170', email: 'tensor.city@gmail.com', rrn: '641005-1******' };
   function docPreviewHtml(title, hit, alts) {
@@ -252,45 +267,132 @@
     if (alts && alts.length) h += '<div class="dp-alt" aria-label="비슷한 서류">' + alts.map(function (t) { return '<button type="button" class="chip" data-alt="' + esc(t) + '">' + esc(t) + '</button>'; }).join('') + '</div>';
     h += '<table class="dp-tbl"><tbody>' +
       row('신청인 성명', SIM_CLIENT.name, '성명', true) + row('주소', SIM_CLIENT.address, '주소', true) + row('전화번호', SIM_CLIENT.phone, '전화번호', true) +
-      row('이메일', SIM_CLIENT.email, '이메일', true) + row('주민등록번호', SIM_CLIENT.rrn, '주민등록번호', true) + row('상대방·대상', '', '해당하면 적어 주십시오') + '</tbody></table>' +
-      '<div class="dp-sec"><b>신청 취지·이유·첨부서류</b> — 「이 서류 초안 작성」을 누르면 AI가 이 서류에 맞게 바로 채웁니다.</div>' +
-      '<div class="dp-foot"><button type="button" class="btn" data-go="1">이 서류 초안 작성</button><span class="dp-note">서식 기본 틀입니다. 의뢰인 정보는 PDV에서 채워졌고, 변호사·법무사가 승인합니다.</span></div></div>';
+      row('이메일', SIM_CLIENT.email, '이메일', true) + row('주민등록번호', SIM_CLIENT.rrn, '주민등록번호', true) + row('상대방·대상', '', '해당하면 적어 주십시오') + '</tbody></table></div>';
     return h;
   }
   function initHome() {
     var form = $('askForm'), input = $('askInput'), prev = $('docPrev'), prevIn = $('docPrevIn'), db = null, index = null, sig = '', cur = '', timer = null;
     attachSuggest(input, form);
     initAttach(input);
+    var curPid = ENGINE_L, curIssued = false, gen = null, frame = null, fReady = false, fQueue = [], fTimer = null, saveT = null, autoT = null;
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var t = input.value.trim();
       if (!t) { input.focus(); return; }
-      window.NaviLaw.go('write.html?q=' + enc(t));
+      if (timer) { clearTimeout(timer); timer = null; }
+      showPrev();   // 방금 친 글자까지 반영한 미리보기를 확정한다
+      if (curIssued) { window.NaviLaw.go(writeUrl(curPid, { doc: cur })); return; }   // 발급받는 서류는 발급 안내로
+      input.value = cur;   // 화면에 보이는 서류를 고른 것으로 한다
+      startGen(cur, curPid);
     });
     Array.prototype.forEach.call(document.querySelectorAll('.chip[data-q]'), function (c) {
       c.addEventListener('click', function () { input.value = c.getAttribute('data-q'); form.requestSubmit(); });
     });
+
+    /* ── 이 화면에서 바로 작성: 엔터를 누르면 페이지를 옮기지 않고, 보이는 서류의 나머지 항목을 AI가 채워 같은 자리에 펼친다. ── */
+    function genFields() { return gen && gen.md ? scanBlanks(gen.md) : []; }
+    function genSecret() { var m = {}; genFields().forEach(function (f) { if (f.sensitive) m[f.key] = 1; }); return m; }
+    function genSnap() {
+      var sec = genSecret(), vals = {}, k; for (k in gen.vals) if (!sec[k]) vals[k] = gen.vals[k];
+      return { w: gen.w, doc: gen.title, md: gen.md, title: gen.title, at: gen.at, rest: gen.rest || '', pid: gen.pid, kind: '', vals: vals, pdv: gen.pdv, id: gen.id };
+    }
+    function genSave() {
+      var nm = genFields().filter(function (f) { return f.kind === 'name'; })[0], snap = genSnap();
+      myDocPut({ id: gen.id, title: gen.title, client: (nm && gen.vals[nm.key]) || '', at: gen.at, step: PHASES[phaseOf(gen.w) - 1], state: snap });
+    }
+    function genSimFill() { genFields().forEach(function (f) { var v = f.kind && SIM_CLIENT[f.kind]; if (v && !gen.vals[f.key]) { gen.vals[f.key] = v; gen.pdv[f.key] = 1; } }); }
+    function genSummary() {
+      var fs = genFields(), n = fs.filter(function (f) { return gen.vals[f.key]; }).length, el = $('gSum');
+      if (el) el.textContent = '입력할 항목 ' + fs.length + '개 중 ' + n + '개 입력' + (n === fs.length ? ' — 모두 입력했습니다.' : '. 아래 서식의 빈 칸에 바로 쓰시면 됩니다.');
+    }
+    function genFail(msg) {
+      prevIn.innerHTML = '<div class="dp-card"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" role="alert">' + esc(msg) + '</p><div class="dp-foot"><button type="button" class="btn" data-go="1">작성 화면에서 하기</button></div></div>';
+      prev.classList.add('open');
+    }
+    function genDraw() {
+      var fs = genFields();
+      prevIn.innerHTML = '<div class="dp-card dp-draft"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" id="gSum" role="status"></p><div class="draft dp-body">' + fieldsHtml(gen.md, fs, gen.vals, gen.pdv) + '</div>' +
+        (gen.rest ? '<details class="dp-rest"><summary>AI의 안내·남은 빈 칸</summary><div class="draft">' + mdToHtml(gen.rest) + '</div></details>' : '') +
+        '<div class="dp-foot"><button type="button" class="btn" data-act="download">웹 표준 서식으로 내려받기</button><button type="button" class="btn line" data-act="copy">복사</button><button type="button" class="btn line" data-act="continue">작성 화면에서 이어서 고치기</button><span class="dp-note">의뢰인 정보는 PDV에서 채워졌습니다. 변호사·법무사가 승인합니다.</span></div></div>';
+      genSummary(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
+    }
+    function fSend(text) {
+      if (fReady) { try { frame.contentWindow.postMessage({ type: 'expert-embed-send', text: text }, HONDI); } catch (e) { genFail('AI에 요청을 보내지 못했습니다.'); } }
+      else fQueue.push(text);
+    }
+    function startGen(title, pid) {
+      var att = takeAttach(), extra = att ? ' 의뢰인이 첨부한 자료: ' + att.names.join(', ') + '.' + (att.text ? '\n\n' + att.text : '') : '';
+      gen = { title: title, pid: pid, md: '', rest: '', vals: {}, pdv: {}, w: 1, at: Date.now(), nudged: false, id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
+      var sec = prevIn.querySelector('.dp-sec'), card = prevIn.querySelector('.dp-card');
+      if (!sec && card) { sec = document.createElement('div'); sec.className = 'dp-sec'; card.appendChild(sec); }
+      if (sec) { sec.classList.add('busy'); sec.setAttribute('role', 'status'); sec.innerHTML = '<b>AI가 이 서류의 나머지 항목을 작성하고 있습니다…</b> 신청 취지·이유·첨부서류 등을 채우는 중입니다.'; }
+      var btn = prevIn.querySelector('[data-go]'); if (btn) btn.disabled = true;
+      if (!frame || frame.getAttribute('data-pid') !== pid) {
+        if (frame) frame.remove();
+        fReady = false; fQueue = [];
+        frame = document.createElement('iframe'); frame.className = 'gen-frame'; frame.setAttribute('data-pid', pid); frame.setAttribute('title', '서류 작성 AI'); frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1;
+        frame.src = HONDI + '/pages/expert-chat.html?persona=' + enc(pid) + '&embed=1&label=' + enc(LABEL);
+        document.body.appendChild(frame);
+      }
+      fSend(draftStartMessage(title, '', '') + extra);
+      if (fTimer) clearTimeout(fTimer);
+      fTimer = setTimeout(function () { if (gen && !gen.md && !gen.failed) { gen.failed = true; genFail('AI와 연결되지 않았습니다. 같은 브라우저에서 hondi.net에 로그인했는지 확인하거나 작성 화면에서 해 주십시오.'); } }, 90000);
+    }
+    window.addEventListener('message', function (e) {
+      if (e.origin !== HONDI || !frame || e.source !== frame.contentWindow || !e.data) return;
+      if (e.data.type === 'expert-embed-ready') { fReady = true; while (fQueue.length) fSend(fQueue.shift()); }
+      else if (e.data.type === 'expert-embed-reply' && gen && !gen.md) {
+        var text = String(e.data.text || ''), ex = extractDoc(text);
+        if (!ex) { if (!gen.nudged) { gen.nudged = true; fSend(NUDGE(gen.title)); } else { gen.failed = true; genFail('초안을 받지 못했습니다. 작성 화면에서 다시 해 주십시오.'); } return; }
+        if (fTimer) { clearTimeout(fTimer); fTimer = null; }
+        var m = STATUS_RE.exec(text); gen.w = m ? parseInt(m[1], 10) : 6;
+        gen.md = ex.md; gen.title = docTitle(ex.md) || gen.title; gen.rest = cleanRest(text, ex.raw); gen.at = Date.now();
+        genSimFill(); genDraw(); genSave();
+      }
+    });
+    prevIn.addEventListener('input', function (e) {
+      var t = e.target; if (!gen || !gen.md || !t.classList || !t.classList.contains('fld')) return;
+      var fs = genFields(), f = fs[+t.getAttribute('data-i')]; if (!f) return;
+      gen.vals[f.key] = t.value; delete gen.pdv[f.key]; t.classList.toggle('done', !!t.value); t.classList.remove('pdv');
+      var b = t.nextSibling; if (b && b.classList && b.classList.contains('fld-badge')) b.remove();
+      Array.prototype.forEach.call(prevIn.querySelectorAll('.fld'), function (o) { if (o !== t && fs[+o.getAttribute('data-i')] === f) { o.value = t.value; o.classList.toggle('done', !!t.value); } });
+      genSummary(); if (saveT) clearTimeout(saveT); saveT = setTimeout(function () { gen.at = Date.now(); genSave(); }, 400);
+    });
+    prevIn.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-act]'); if (!b || !gen || !gen.md) return;
+      var act = b.getAttribute('data-act'), filled = fillBlanks(gen.md, gen.vals, 'text');
+      if (act === 'download') {
+        var blob = new Blob([toWebDoc(gen.title, filled)], { type: 'text/html;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = fileName(gen.title, new Date(gen.at)); document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      } else if (act === 'copy') {
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(filled).then(function () { toast('복사했습니다.'); }, function () { toast('복사하지 못했습니다.'); });
+        else toast('이 브라우저에서는 복사할 수 없습니다. 내려받기를 이용해 주세요.');
+      } else if (act === 'continue') { genSave(); storeSet('navilaw_write_last', genSnap()); window.NaviLaw.go('write.html'); }
+    });
     /* 서류 미리보기 — 입력하면 곧바로(0.12초 뒤) 입력칸 아래로 펼친다. 서류 목록이 아직 오지 않았어도 입력한 말로 먼저 펼치고, 목록이 오면 맞는 서류로 바꾼다. */
     function showPrev() {
       var q = input.value.trim();
-      if (!q) { prev.classList.remove('open'); prev.setAttribute('aria-hidden', 'true'); sig = ''; return; }
+      if (!q) { prev.classList.remove('open'); prev.setAttribute('aria-hidden', 'true'); sig = ''; gen = null; return; }
       var hits = index ? window.NaviLawDocs.search(index, q, { limit: 5 }).filter(function (e) { return e.kind !== 'field'; }) : [];
       var top = hits[0] || null, title = top ? top.t : q, issued = db && window.NaviLawDocs.findIssued ? window.NaviLawDocs.findIssued(db, title) : null;
       var key = title + '|' + (issued ? 'i' : '');
-      cur = title;
+      cur = title; curPid = (top && top.pid) || ENGINE_L; curIssued = !!issued;
       if (key !== sig) {
-        sig = key;
+        sig = key; gen = null;
         if (issued) prevIn.innerHTML = '<div class="dp-card"><h2>' + esc(title) + '</h2><p class="dp-meta">발급받아 첨부하는 서류입니다</p><div class="dp-foot"><button type="button" class="btn" data-go="1">발급 안내 보기</button><span class="dp-note">작성하는 서류가 아니라 발급처·준비물을 안내합니다.</span></div></div>';
         else prevIn.innerHTML = docPreviewHtml(title, top, hits.slice(1, 5).map(function (e) { return e.t; }));
       }
       prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
+      /* 입력한 말이 서류 명칭과 정확히 같으면 확정으로 보고 잠시 뒤 바로 작성을 시작한다(엔터·추천 서류 선택은 즉시). */
+      if (autoT) { clearTimeout(autoT); autoT = null; }
+      if (top && !issued && !gen && top.t === q) autoT = setTimeout(function () { autoT = null; if (!gen && input.value.trim() === q) form.requestSubmit(); }, 700);
     }
     function schedule() { if (timer) clearTimeout(timer); timer = setTimeout(showPrev, 120); }
     input.addEventListener('input', schedule);
     prevIn.addEventListener('click', function (e) {
       var alt = e.target.closest('[data-alt]'), go = e.target.closest('[data-go]');
-      if (alt) { input.value = alt.getAttribute('data-alt'); input.focus(); showPrev(); }
-      else if (go && cur) window.NaviLaw.go(writeUrl(ENGINE_L, { doc: cur }));
+      if (alt) { input.value = alt.getAttribute('data-alt'); showPrev(); form.requestSubmit(); }   // 추천 서류를 고르면 바로 이 화면에서 작성
+      else if (go && cur) window.NaviLaw.go(writeUrl(curPid, { doc: cur }));
     });
     fetch('data/docs.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (d) { db = d; index = window.NaviLawDocs.createIndex(d); if (input.value.trim()) showPrev(); }).catch(function () { /* 목록이 없어도 입력한 말로 미리보기는 나온다 */ });
@@ -711,7 +813,7 @@
       st.rest = cleanRest(text, ex ? ex.raw : '');
       if (!ex && !st.md && !nudged) {   // 초안 대신 인사·질문이 왔으면 묻지 않고 바로 쓰라고 한 번 더 요청한다
         nudged = true; st.rest = ''; save();
-        send('질문하지 말고 지금 바로 「' + (st.doc || '요청한 서류') + '」 초안 전체를 ~~~markdown 코드 블록(앞머리 포함)으로 작성해 주세요. 모르는 항목은 [확인 필요: 항목명] 빈 칸으로 두세요.');
+        send(NUDGE(st.doc));
         return;
       }
       save(); setBusy(false);
@@ -722,11 +824,7 @@
       }
     }
 
-    function startMessage(doc, memo, q) {
-      var tail = ' 인사나 질문 없이 지금 바로 초안 전체를 작성해 주세요. 의뢰인의 성명·주소·전화번호·이메일·주민등록번호는 의뢰인의 PDV에서 자동으로 채워지므로 [확인 필요: 항목명] 빈 칸으로 두고, 그 밖에 모르는 항목은 묻지 말고 빈 칸으로 남긴 뒤, 초안 아래 빈 칸 표로 알려 주세요.';
-      if (q) return '다음 요청에 맞는 서류 초안을 작성해 주세요: ' + q + '.' + tail;
-      return '「' + doc + '」 초안을 작성해 주세요.' + (memo ? ' 알고 있는 내용: ' + memo + '.' : '') + tail;
-    }
+    function startMessage(doc, memo, q) { return draftStartMessage(doc, memo, q); }
     function begin(doc, memo, q) {
       var N = window.NaviLawDocs, it = !q && doc && N.findIssued ? N.findIssued(docsDb, doc) : (q && N.findIssuedAsk ? N.findIssuedAsk(docsDb, q) : null);   // 받아서 첨부하는 서류는 초안이 아니라 발급 안내로 시작한다 — 서류명만 고른 경우와 "…떼는 법" 같은 발급 문의 문장
       st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '', vals: {}, pdv: {} }; drawSig = ''; pdvStatus = ''; nudged = false; pdvAuto = false;
