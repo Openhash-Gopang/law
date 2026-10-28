@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { buildDocsDb } from '../scripts/build-docs-index.mjs';
 
-const CORE = buildDocsDb({ forms: [], issued: [] });   // 법제처 민원서식·발급 서류 데이터와 무관하게 화면 동작을 시험한다
+const CORE = buildDocsDb({ forms: [], issued: [], court: [] });   // 법제처 민원서식·발급 서류·법원 양식 데이터와 무관하게 화면 동작을 시험한다
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');

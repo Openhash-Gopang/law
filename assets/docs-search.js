@@ -75,7 +75,7 @@
     for (k = 0; k < e.aj.length; k++) { i = at(e.aj[k], qj); if (i === 0) s = Math.max(s, 88); else if (i > 0) s = Math.max(s, 74); }
     if (!s && at(e.cj, qj) >= 0) s = 40;
     if (!s && at(e.dj, qj) >= 0) s = 30;
-    return e.p === 'minwon' && s > 3 ? s - 3 : s;   // 법제처 민원서식은 같은 점수면 핵심 서류 뒤
+    return (e.p === 'minwon' || e.p === 'court') && s > 3 ? s - 3 : s;   // 법제처 민원서식·법원 양식은 같은 점수면 핵심·발급 서류 뒤
   }
   /** search(index, "근저", { persona: 'scrivener'|'lawyer'|'', limit: 8 }) → 점수 순 결과(같은 이름의 서류는 첫 항목만) */
   function search(index, q, opts) {

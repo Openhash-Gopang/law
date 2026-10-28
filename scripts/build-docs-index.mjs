@@ -29,6 +29,16 @@ export function buildDocsDb(opts = {}) {
   const nk = (s) => String(s).replace(/\s+/g, '').toLowerCase();
   for (const f of issued) push('issued', 'lawyer', f.c, f.t, f.d || '', f.a || []);
   const issuedKeys = new Set(issued.map((f) => nk(f.t)));
+  // 법원 양식(대법원 전자민원센터 양식모음) — data/court-forms.json 이 있을 때만 합친다(scripts/fetch-court-forms.mjs 가 만든다). 핵심 서류·발급 서류와 이름이 같으면 그쪽만 남긴다.
+  let court = opts.court; if (!court) { try { court = read('data/court-forms.json').forms || []; } catch { court = []; /* 아직 수집 전 */ } }
+  const have = new Set(docs.map((d) => nk(d.t)));
+  for (const f of court) {
+    if (have.has(nk(f.t))) continue;
+    const where = f.n > 1 && f.court ? f.court + ' 외 ' + (f.n - 1) + '곳' : (f.court || '법원');
+    const row = { t: f.t, p: 'court', pid: 'lawyer', c: ['법원 양식', f.cat, where].filter(Boolean).join(' · '), d: [f.no, '대법원 전자민원센터 양식모음'].filter(Boolean).join(' · ') };
+    const a = aliasFor(f.t); if (a.length) row.a = a;
+    docs.push(row);
+  }
   // 법제처 별표·서식(민원서식) — data/law-forms.json 이 있을 때만 합친다(scripts/fetch-law-forms.mjs 가 만든다). 발급 서류와 이름이 같으면 발급 서류만 남긴다.
   let extra = opts.forms; if (!extra) { try { extra = read('data/law-forms.json').forms || []; } catch { extra = []; /* 아직 수집 전 */ } }
   for (const f of extra) {
