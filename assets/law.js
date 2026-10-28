@@ -401,8 +401,15 @@
     });
     /* 홈 맨 위: 오늘 날짜 기준으로 작성할 수 있는 서류 수(발급받아 첨부하는 서류는 뺀다). */
     function showCount(d) {
-      var el = $('docCount'), n = ((d && d.docs) || []).filter(function (x) { return x.p !== 'issued'; }).length, t = new Date();
-      if (el && n) el.textContent = t.getFullYear() + '년 ' + (t.getMonth() + 1) + '월 ' + t.getDate() + '일 현재, ' + n.toLocaleString('en-US') + '건의 민원 & 법원 서류를 작성합니다.';
+      var el = $('docCount'), n = ((d && d.docs) || []).filter(function (x) { return x.p !== 'issued'; }).length;
+      if (!el || !n) return;
+      function draw() {   // 한국 표준시(UTC+9) 기준 날짜. 기기 시간대와 무관하게 한국 날짜로 표시한다.
+        var k = new Date(Date.now() + 9 * 3600000);
+        el.textContent = k.getUTCFullYear() + '년 ' + (k.getUTCMonth() + 1) + '월 ' + k.getUTCDate() + '일 현재, ' + n.toLocaleString('en-US') + '건의 민원 & 법원 서류를 작성합니다.';
+      }
+      draw();
+      if (!/jsdom/i.test(navigator.userAgent)) setInterval(draw, 60000);   // 화면을 켜 둔 채 자정이 지나도 날짜가 바뀐다(시험 환경 제외)
+      document.addEventListener('visibilitychange', draw);
     }
     fetch('data/docs.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (d) { db = d; showCount(d); index = window.NaviLawDocs.createIndex(d); if (input.value.trim()) showPrev(); }).catch(function () { /* 목록이 없어도 입력한 말로 미리보기는 나온다 */ });
@@ -544,7 +551,7 @@
      엔진은 모르는 항목을 [확인 필요: …] 또는 [변호사·법무사 기재: …] 로 남긴다. 이 표시를 찾아 입력 칸으로 바꾸고, 입력한 값은 이 브라우저에서만 서식에 끼워 넣는다(AI 에게 보내지 않는다). */
   var BLANK_RE = /\[(?:확인 필요|[가-힣]{2,6} 기재)\s*[:：]\s*([^\]]*?)\s*\]/g;
   var SENSITIVE_RE = /(주민등록번호|주민번호|외국인등록번호|계좌번호|카드번호|비밀번호|여권번호|운전면허번호)/;
-  var NOT_SELF_RE = /(피신청인|피청구인|피고|피상속인|상대|채무자|채권자|임대인|임차인|매도인|매수인|양도인|양수인|대리인|증인|사망|배우자|자녀|부모|법정|변호사|법무사|세무사|변리사|관할|법원|기관|회사|사업장|사업자|상호|목적물|부동산|토지|농지|임야|건물|사건|대표|피해자|가해자|제출처)/;
+  var NOT_SELF_RE = /(피신청인|피청구인|피고|피상속인|상대|채무자|채권자|임대인|임차인|매도인|매수인|양도인|양수인|대리인|증인|사망|배우자|자녀|부모|법정|변호사|법무사|세무사|변리사|관할|법원|기관|회사|사업장|사업자|상호|목적물|부동산|토지|농지|임야|건물|사건|피해자|가해자|제출처)/;
   function cleanLabel(s) { return String(s || '').replace(/[*_`#>|]/g, '').replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').replace(/[:：]\s*$/, '').trim(); }
   function blankLabel(line, idx, hint) {
     var bars = [], i, k, m;
@@ -566,7 +573,7 @@
     if (/(주민등록번호|주민번호)/.test(t)) return 'rrn';   // 의뢰인 본인 칸. 실제 PDV 에는 요청하지 않는다
     if (SENSITIVE_RE.test(t)) return null;
     if (/(이메일|전자우편|e-?mail)/i.test(t)) return 'email';
-    if (/(성명|이름)/.test(t)) return 'name';
+    if (/(성\s*명|이름)/.test(t)) return 'name';
     if (/주소/.test(t)) return 'address';
     if (/(연락처|전화|휴대)/.test(t)) return 'phone';
     return null;
