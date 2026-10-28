@@ -420,7 +420,18 @@
     fetch('data/docs.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(boot).catch(function () { boot(null); });
   }
 
+  /* ── 나비로의 특징 배너 — "다시 보지 않기"를 누르면 이 브라우저에서 다시 나오지 않는다(문구를 바꾸면 키의 버전을 올려 다시 보이게 한다). ── */
+  var PROMO_KEY = 'navilaw_promo_v1';
+  function initPromo() {
+    var el = $('promo'); if (!el) return;
+    var box = el.parentNode && el.parentNode.className === 'promo-wrap' ? el.parentNode : el;
+    try { if (localStorage.getItem(PROMO_KEY) === '1') { box.remove(); return; } } catch (e) { /* 저장을 못 하면 그냥 보인다 */ }
+    var b = $('promoClose');
+    if (b) b.addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } box.remove(); });
+  }
+
   var page = document.body.getAttribute('data-page');
+  initPromo();
   if (page === 'home') initHome();
   else if (page === 'docs') initDocs();
   else if (page === 'write') initWrite();
