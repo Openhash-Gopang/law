@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { parseTotal, splitCourtTitle, parseRows, dedupe, groupByTitle, collect, buildUrl, decodeBody, CourtSiteError } from '../scripts/court-forms-lib.mjs';
+import { stripEffective, parseTotal, splitCourtTitle, parseRows, dedupe, groupByTitle, collect, buildUrl, decodeBody, CourtSiteError } from '../scripts/court-forms-lib.mjs';
 import { buildDocsDb } from '../scripts/build-docs-index.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -83,4 +83,15 @@ test('글자 인코딩: EUC-KR 응답은 meta·헤더의 charset 으로, 선언�
   }
   assert.equal(decodeBody(Buffer.from('<p>전체글수 : 5건</p>', 'utf8'), 'text/html; charset=utf-8').charset, 'utf-8');
   assert.equal(parseTotal(decodeBody(Buffer.from('<p>전체글수 : 5건</p>', 'utf8'), '').html), 5, '선언 없는 UTF-8 은 그대로');
+});
+
+test('제목 끝의 시행일 꼬리표는 떼고(수집 때와 서류 DB 를 만들 때), 날짜만 다른 같은 양식은 한 건으로 합친다', () => {
+  assert.equal(stripEffective('개인회생절차 개시신청서(2021. 4. 20.시행)'), '개인회생절차 개시신청서');
+  assert.equal(stripEffective('개인회생절차 개시결정안내문 (2020. 3. 1. 시행)'), '개인회생절차 개시결정안내문');
+  assert.equal(stripEffective('자료제출목록-신청서 필수 첨부자료(26. 7. 1. 시행)'), '자료제출목록-신청서 필수 첨부자료');
+  assert.equal(stripEffective('채권자목록(제출용)'), '채권자목록(제출용)', '다른 괄호는 그대로');
+  assert.equal(splitCourtTitle('[개인회생] (서울회생법원) 개시신청서(2021. 4. 20.시행)').t, '개시신청서');
+  const c = (t, courts) => ({ t, cat: '개인회생', court: courts, courts: [courts], n: 1 });
+  const db = buildDocsDb({ forms: [], issued: [], court: [c('개시신청서(2021. 4. 20.시행)', 'A법원'), c('개시신청서', 'B법원'), c('변제계획안(26. 7. 1. 시행)', 'C법원')] });
+  assert.deepEqual(db.docs.filter((d) => d.p === 'court').map((d) => d.t), ['개시신청서', '변제계획안']);
 });

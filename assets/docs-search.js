@@ -110,5 +110,23 @@
     }
     return ts >= 72 ? top : null;
   }
-  root.NaviLawDocs = { createIndex: createIndex, search: search, best: best, norm: norm, jamo: jamo, cho: cho };
+  /** 발급 서류 찾기: 입력이 서류명(괄호 뺀 이름 포함)이나 별칭과 "정확히" 같을 때만 — 문장 속에 서류명이 들어 있는 요청("가족관계증명서를 붙인 소장")은 해당하지 않는다. db 는 data/docs.json 내용. */
+  function findIssued(db, text) {
+    var n = norm(text), list = (db && db.docs) || [], i, k, d;
+    if (!n) return null;
+    for (i = 0; i < list.length; i++) {
+      d = list[i]; if (d.p !== 'issued') continue;
+      if (norm(d.t) === n || norm(d.t.replace(/\([^)]*\)/g, '')) === n) return d;
+      for (k = 0; d.a && k < d.a.length; k++) if (norm(d.a[k]) === n) return d;
+    }
+    return null;
+  }
+  /** 발급 서류를 골랐을 때 엔진에 보내는 요청문: 초안이 아니라 발급 안내를 청한다. */
+  function issuedAsk(d, memo) {
+    var where = String(d.c || '').replace(/^(?:발급 서류|조회 신청) · /, ''), service = /^조회 신청/.test(d.c || '');
+    return '「' + d.t + '」은(는) 작성하는 서류가 아니라 ' + (service ? '신청해서 결과를 받는 서비스' : '발급받아 첨부하는 서류') + '입니다. 초안을 쓰지 말고 다음을 안내해 주세요: ' +
+      '① 어디서 ' + (service ? '신청' : '발급받') + '는지(참고 처리 기관: ' + where + ') ② 온라인·방문 가능 여부와 준비물 ③ 본인·대리인 신청 가능 여부와 위임장 ④ 종류·용도 선택(예: 상세·일반, 열람·발급) ⑤ 유효기간이나 제출처가 정하는 기준 ⑥ 이 서류가 쓰이는 절차와 흔한 실수. ' +
+      '수수료·제한처럼 확실하지 않은 것은 단정하지 말고 해당 기관에서 확인하도록 안내해 주세요. 신청과 수수료 납부는 제가 직접 합니다.' + (memo ? ' 알고 있는 내용: ' + memo + '.' : '');
+  }
+  root.NaviLawDocs = { createIndex: createIndex, search: search, best: best, findIssued: findIssued, issuedAsk: issuedAsk, norm: norm, jamo: jamo, cho: cho };
 })(typeof window !== 'undefined' ? window : this);

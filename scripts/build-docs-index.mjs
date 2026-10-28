@@ -32,8 +32,11 @@ export function buildDocsDb(opts = {}) {
   // 법원 양식(대법원 전자민원센터 양식모음) — data/court-forms.json 이 있을 때만 합친다(scripts/fetch-court-forms.mjs 가 만든다). 핵심 서류·발급 서류와 이름이 같으면 그쪽만 남긴다.
   let court = opts.court; if (!court) { try { court = read('data/court-forms.json').forms || []; } catch { court = []; /* 아직 수집 전 */ } }
   const have = new Set(docs.map((d) => nk(d.t)));
-  for (const f of court) {
-    if (have.has(nk(f.t))) continue;
+  const stripEff = (t) => String(t).replace(/\s*\(\s*\d{2,4}\.\s*\d{1,2}\.\s*\d{1,2}\.?\s*(?:부터\s*)?시행\s*\)/g, '').replace(/\s+/g, ' ').trim();   // 제목 끝의 시행일 꼬리표(scripts/court-forms-lib.mjs 의 stripEffective 와 같다)
+  for (const f0 of court) {
+    const f = { ...f0, t: stripEff(f0.t) };
+    if (!f.t || have.has(nk(f.t))) continue;
+    have.add(nk(f.t));
     const where = f.n > 1 && f.court ? f.court + ' 외 ' + (f.n - 1) + '곳' : (f.court || '법원');
     const row = { t: f.t, p: 'court', pid: 'lawyer', c: ['법원 양식', f.cat, where].filter(Boolean).join(' · '), d: [f.no, '대법원 전자민원센터 양식모음'].filter(Boolean).join(' · ') };
     const a = aliasFor(f.t); if (a.length) row.a = a;

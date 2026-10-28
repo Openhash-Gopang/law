@@ -208,3 +208,30 @@ test('규모: 민원서식이 만 건 넘게 합쳐져도 색인은 2초 안, �
   assert.ok((Date.now() - t1) / 50 < 20, '검색 느림');
 });
 
+
+// 발급 서류를 고르면 초안이 아니라 발급 안내로 시작한다 — 판정은 입력이 서류명·별칭과 "정확히" 같을 때만.
+test('발급 서류 판정: 서류명·괄호 뺀 이름·별칭과 같을 때만 발급 서류, 문장 속 서류명·작성 서류는 아니다', () => {
+  const dbI = buildDocsDb({ forms: [], court: [] });
+  const f = (t) => D.findIssued(dbI, t);
+  assert.equal(f('가족관계증명서').t, '가족관계증명서');
+  assert.equal(f('가족 관계 증명서').t, '가족관계증명서', '띄어쓰기 무시');
+  assert.equal(f('등기사항전부증명서(법인)').t, '등기사항전부증명서(법인)');
+  assert.equal(f('법인등기부등본').t, '등기사항전부증명서(법인)', '별칭');
+  assert.equal(f('등기사항전부증명서').p, 'issued', '괄호를 뺀 이름도 발급 서류');
+  assert.equal(f('안심상속').p, 'issued');
+  for (const no of ['가족관계증명서를 붙인 소장', '근저당권말소등기신청서', '소장', '', '   ', '쿼카쿼카서류']) assert.equal(f(no), null, JSON.stringify(no));
+  assert.equal(D.findIssued(null, '가족관계증명서'), null);
+  assert.equal(D.findIssued(CORE, '가족관계증명서'), null, '발급 서류가 없는 DB');
+});
+
+test('발급 안내 요청문: 초안을 쓰지 말고 발급처·준비물·대리·유효기간을 안내하게 하며, 조회 신청 서비스는 말을 바꾼다', () => {
+  const dbI = buildDocsDb({ forms: [], court: [] });
+  const a = D.issuedAsk(D.findIssued(dbI, '가족관계증명서'), '');
+  assert.match(a, /^「가족관계증명서」은\(는\) 작성하는 서류가 아니라 발급받아 첨부하는 서류입니다\. 초안을 쓰지 말고/);
+  for (const w of ['정부24', '전자가족관계등록시스템', '준비물', '대리인', '유효기간', '단정하지 말고', '수수료 납부는 제가 직접']) assert.ok(a.includes(w), w);
+  assert.ok(!a.includes('발급 서류 · '), '발급처 앞의 분류 표시는 뗀다');
+  assert.doesNotMatch(a, /알고 있는 내용/);
+  assert.match(D.issuedAsk(D.findIssued(dbI, '가족관계증명서'), '2018년 이혼'), /알고 있는 내용: 2018년 이혼\.$/);
+  const s = D.issuedAsk(D.findIssued(dbI, '안심상속'), '');
+  assert.match(s, /신청해서 결과를 받는 서비스입니다/); assert.doesNotMatch(s, /발급받아 첨부하는 서류/);
+});

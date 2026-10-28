@@ -13,12 +13,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const js = read('assets/law.js');
 
-export function load(page, search = '', hash = '', store = {}) {
+export function load(page, search = '', hash = '', store = {}, db = CORE) {
   const html = read(page).replace(/<script[^>]*src="https:[^>]*><\/script>/g, '');
   const dom = new JSDOM(html, { url: 'https://law.hondi.net/' + page + search + hash, runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
   for (const [k, v] of Object.entries(store)) w.localStorage.setItem(k, JSON.stringify(v));
-  w.fetch = (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(u === 'data/docs.json' ? CORE : JSON.parse(read(u))) });
+  w.fetch = (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(u === 'data/docs.json' ? db : JSON.parse(read(u))) });
   w.Element.prototype.scrollIntoView = function () {};
   w.HTMLFormElement.prototype.requestSubmit = function () { this.dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true })); };
   w.eval(read('assets/docs-search.js'));
@@ -180,4 +180,57 @@ test('배너: 접근성(제목 연결·키보드로 닫기 버튼)과 인쇄 숨
   const b = w.document.getElementById('promoClose');
   assert.equal(b.tagName, 'BUTTON'); assert.ok(b.getAttribute('aria-label'));
   assert.match(read('assets/law.css'), /@media print \{ \.promo-wrap \{ display: none/);
+});
+
+// ── 발급 서류: 초안이 아니라 발급 안내로 시작한다 ──
+const WITH_ISSUED = buildDocsDb({ forms: [], court: [] });   // 발급 서류 포함(법제처·법원 수집 데이터와 무관)
+function hook(w) {
+  const sent = [], frame = w.document.getElementById('chatFrame');
+  Object.defineProperty(frame, 'contentWindow', { value: { postMessage: (m, o) => sent.push([m, o]) } });
+  const fire = (data, origin = 'https://hondi.net') => w.dispatchEvent(Object.assign(new w.Event('message'), { data, origin, source: frame.contentWindow }));
+  return { sent, fire };
+}
+test('작성 화면: 발급 서류(가족관계증명서)는 발급 안내로 시작하고, 답변 전체를 안내 칸에 보여 주며 초안 단계·버튼은 없다', async () => {
+  const w = load('write.html', '?persona=lawyer&doc=' + encodeURIComponent('가족관계증명서'), '', {}, WITH_ISSUED).window; await tick();
+  const { sent, fire } = hook(w);
+  fire({ type: 'expert-embed-ready' }); await tick();
+  assert.equal(sent.length, 1);
+  assert.match(sent[0][0].text, /^「가족관계증명서」은\(는\) 작성하는 서류가 아니라 발급받아 첨부하는 서류입니다/);
+  assert.match(sent[0][0].text, /정부24/); assert.doesNotMatch(sent[0][0].text, /묻지 말고 빈 칸으로 남긴 뒤/);
+  assert.equal(w.document.getElementById('draftTitle').textContent, '발급 안내');
+  assert.match(w.document.getElementById('startSumText').textContent, /가족관계증명서 · 발급 안내/);
+  assert.equal(w.document.getElementById('phases').style.display, 'none', '초안 진행 단계는 숨긴다');
+  fire({ type: 'expert-embed-reply', text: '가족관계증명서는 정부24에서 발급받습니다.\n\n- 준비물: 신분증' }, 'https://evil.example'); await tick();
+  assert.doesNotMatch(w.document.getElementById('draft').textContent, /정부24에서 발급/, '다른 출처의 메시지는 무시한다');
+  fire({ type: 'expert-embed-reply', text: '[서류 보조 AI | 서류 작성 트랙 | 현재: W-1 | 서류: 가족관계증명서 | 서식: - | 게이트: -]\n\n가족관계증명서는 정부24에서 발급받습니다.\n\n- 준비물: 신분증' }); await tick();
+  assert.match(w.document.getElementById('draft').textContent, /정부24에서 발급받습니다/);
+  assert.doesNotMatch(w.document.getElementById('draft').textContent, /서류 작성 트랙/, '상태 줄은 가린다');
+  assert.equal(w.document.getElementById('blanks').hidden, true);
+  assert.equal(w.document.querySelector('#actions [data-act="download"]'), null);
+  assert.equal(w.document.querySelector('#actions [data-act="next"]'), null);
+  assert.ok(w.document.querySelector('#actions [data-act="copy"]'));
+  assert.equal(w.document.getElementById('chatH').textContent, '궁금한 점은 여기에 말씀하십시오');
+});
+
+test('작성 화면: 작성하는 서류와 문장 속 서류명은 그대로 초안으로 시작한다', async () => {
+  let w = load('write.html', '?persona=judicial-scrivener&doc=' + encodeURIComponent('근저당권말소등기신청서'), '', {}, WITH_ISSUED).window; await tick();
+  let h = hook(w); h.fire({ type: 'expert-embed-ready' }); await tick();
+  assert.match(h.sent[0][0].text, /묻지 말고 빈 칸으로 남긴 뒤/); assert.equal(w.document.getElementById('draftTitle').textContent, '초안');
+  assert.notEqual(w.document.getElementById('phases').style.display, 'none');
+  w = load('write.html', '?persona=lawyer&q=' + encodeURIComponent('가족관계증명서를 붙인 소장 작성'), '', {}, WITH_ISSUED).window; await tick();
+  h = hook(w); h.fire({ type: 'expert-embed-ready' }); await tick();
+  assert.match(h.sent[0][0].text, /초안을 작성해 주세요/); assert.doesNotMatch(h.sent[0][0].text, /발급받아 첨부하는 서류/);
+});
+
+test('작성 화면: 직접 입력한 서류명이 발급 서류와 같아도 발급 안내로 시작하고, 이어쓰기는 발급 안내 상태로 돌아간다', async () => {
+  let w = load('write.html', '?persona=lawyer', '', {}, WITH_ISSUED).window; await tick();
+  const h = hook(w);
+  w.document.getElementById('fDoc').value = '주민등록등본';
+  w.document.getElementById('startForm').dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true }));
+  h.fire({ type: 'expert-embed-ready' }); await tick();
+  assert.match(h.sent[0][0].text, /^「주민등록등본」은\(는\) 작성하는 서류가 아니라/);
+  const saved = { w: 1, doc: '주민등록등본', md: '', title: '', at: 1, rest: '정부24에서 발급받습니다.', pid: 'lawyer', kind: 'issued' };
+  w = load('write.html', '', '', { navilaw_write_last: saved }, WITH_ISSUED).window; await tick();
+  assert.equal(w.document.getElementById('draftTitle').textContent, '발급 안내');
+  assert.match(w.document.getElementById('draft').textContent, /정부24에서 발급받습니다/);
 });
