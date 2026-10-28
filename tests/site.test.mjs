@@ -13,13 +13,14 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const js = read('assets/law.js');
 
-export function load(page, search = '', hash = '', store = {}, db = CORE) {
+export function load(page, search = '', hash = '', store = {}, db = CORE, pre = null) {
   const html = read(page).replace(/<script[^>]*src="https:[^>]*><\/script>/g, '');
   const dom = new JSDOM(html, { url: 'https://law.hondi.net/' + page + search + hash, runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
   for (const [k, v] of Object.entries(store)) w.localStorage.setItem(k, JSON.stringify(v));
   w.fetch = (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(u === 'data/docs.json' ? db : JSON.parse(read(u))) });
   w.Element.prototype.scrollIntoView = function () {};
+  if (pre) pre(w);
   w.HTMLFormElement.prototype.requestSubmit = function () { this.dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true })); };
   w.eval(read('assets/docs-search.js'));
   w.eval(js.replace(/^\/\*[\s\S]*?\*\//, ''));
@@ -267,4 +268,74 @@ test('작성 화면: 내부 처리용 앞머리 표(doc_type·status…)는 화�
   const html = await new Promise((res) => { const r = new w.FileReader(); r.onload = () => res(r.result); r.readAsText(blob); });
   assert.match(html, /<h1>근저당권말소등기신청서<\/h1>/); assert.doesNotMatch(html, /doc_type|class="meta"|DRAFT/);
   assert.match(html, /<title>근저당권말소등기신청서<\/title>/);
+});
+
+// ── 서식 입력 칸 · 떠 있는 대화창 · 혼디 PDV 자동 기입 ──
+const FORM = '[서류 보조 AI | 서류 작성 트랙 | 현재: W-6 | 서류: 신청서 | 서식: 신규 | 게이트: 서류 승인 대기]\n\n~~~markdown\n---\ndoc_type: 신청서\nstatus: DRAFT\n---\n\n# 신청서\n\n| 구분 | 내용 |\n|---|---|\n| 신청인 성명 | [확인 필요: 신청인 성명] |\n| 신청인 주소 | [확인 필요: 신청인 주소] |\n| 연락처 | [확인 필요: 휴대전화] |\n| 상대방 성명 | [확인 필요: 상대방 성명] |\n| 주민등록번호 | [확인 필요: 주민등록번호] |\n\n끝.\n~~~\n\n빈 칸을 알려 주세요.';
+async function openForm(opts = {}) {
+  const w = load('write.html', '?persona=lawyer&doc=' + encodeURIComponent('신청서') + (opts.ac ? '&gwp=1&origin=' + encodeURIComponent('https://hondi.net') : ''), '', {}, CORE, opts.pre).window; await tick();
+  const h = hook(w); h.fire({ type: 'expert-embed-ready' }); await tick();
+  h.fire({ type: 'expert-embed-reply', text: FORM }); await tick();
+  return { w, ...h };
+}
+test('scanBlanks/pdvKind: 본인 인적사항만 PDV 대상, 상대방·주민번호는 제외', () => {
+  const N = load('write.html').window.NaviLaw, f = N.scanBlanks(FORM.split('~~~markdown')[1]);
+  assert.deepEqual(Array.from(f, (x) => x.label), ['신청인 성명', '신청인 주소', '연락처', '상대방 성명', '주민등록번호']);
+  assert.deepEqual(Array.from(f, (x) => x.kind), ['name', 'address', 'phone', null, null]);
+  assert.equal(f[4].sensitive, true);
+  assert.equal(N.pdvKind('피고 주소', ''), null); assert.equal(N.pdvKind('부동산 소재지', '주소'), null);
+});
+test('작성 화면: 빈 칸은 입력 칸으로 나오고, 앞머리 표는 숨고, 입력값이 내려받기에 들어간다', async () => {
+  const { w } = await openForm(); const d = w.document;
+  const inputs = d.querySelectorAll('#draft input.fld');
+  assert.equal(inputs.length, 5);
+  assert.doesNotMatch(d.getElementById('draft').textContent, /doc_type|\[확인 필요/);
+  assert.match(d.getElementById('fillSum').textContent, /5개 중 0개/);
+  inputs[0].value = '홍길동'; inputs[0].dispatchEvent(new w.Event('input', { bubbles: true }));
+  inputs[4].value = '900101-1234567'; inputs[4].dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert.match(d.getElementById('fillSum').textContent, /5개 중 2개/);
+  let html = ''; w.Blob = class { constructor(p) { html = p.join(''); } }; w.URL.createObjectURL = () => 'blob:x'; w.URL.revokeObjectURL = () => {};
+  d.querySelector('#actions [data-act="download"]').click();
+  assert.match(html, /홍길동/); assert.match(html, /<mark>\[확인 필요: 신청인 주소\]<\/mark>/);
+  const saved = JSON.parse(w.localStorage.getItem('navilaw_write_last'));
+  await new Promise((r) => setTimeout(r, 500));
+  const s2 = JSON.parse(w.localStorage.getItem('navilaw_write_last'));
+  assert.ok(Object.values(s2.vals).includes('홍길동'));
+  assert.ok(!Object.values(s2.vals).includes('900101-1234567'), '주민등록번호는 저장하지 않는다');
+  assert.ok(saved);
+});
+test('작성 화면: 대화창은 떠 있는 아이콘으로 열고 닫는다', async () => {
+  const { w } = await openForm(); const d = w.document, fab = d.getElementById('chatFab'), p = d.getElementById('chatPanel');
+  assert.ok(!p.classList.contains('open')); assert.equal(fab.getAttribute('aria-expanded'), 'false');
+  assert.equal(d.getElementById('chatDot').hidden, false, '새 초안이 오면 점으로 알린다');
+  fab.click(); assert.ok(p.classList.contains('open')); assert.equal(fab.getAttribute('aria-expanded'), 'true'); assert.equal(d.getElementById('chatDot').hidden, true);
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); assert.ok(!p.classList.contains('open'));
+  fab.click(); d.getElementById('chatClose').click(); assert.ok(!p.classList.contains('open'));
+});
+test('PDV: 비서가 연 창이면 이름·연락처·주소를 요청하고, 허용된 값만 PDV 표시와 함께 채운다', async () => {
+  const posts = []; let op;
+  const { w } = await openForm({ ac: true, pre: (win) => { op = { closed: false, postMessage: (m, o) => posts.push([m, o]) }; Object.defineProperty(win, 'opener', { value: op }); } });
+  assert.equal(posts.length, 1); const [m, o] = posts[0];
+  assert.equal(o, 'https://hondi.net'); assert.equal(m.type, 'GWP_PDV_REQUEST');
+  assert.deepEqual(Array.from(m.fields).sort(), ['이름', '연락처', '주소'].sort());
+  assert.ok(!JSON.stringify(m).includes('주민'));
+  const reply = (data, origin = 'https://hondi.net', source = op) => w.dispatchEvent(Object.assign(new w.Event('message'), { data, origin, source }));
+  reply({ type: 'GWP_PDV_RESPONSE', request_id: m.request_id, approved: true, values: { 이름: '악당' } }, 'https://evil.example'); await tick();
+  assert.equal(w.document.querySelectorAll('#draft input.pdv').length, 0, '다른 출처 응답은 무시');
+  reply({ type: 'GWP_PDV_RESPONSE', request_id: m.request_id, approved: true, values: { 이름: '홍길동', 연락처: '010-1111-2222', 주소: { not_in_pdv: true } } }); await tick();
+  const ins = w.document.querySelectorAll('#draft input.fld');
+  assert.equal(ins[0].value, '홍길동'); assert.equal(ins[2].value, '010-1111-2222'); assert.equal(ins[1].value, '');
+  assert.equal(w.document.querySelectorAll('#draft input.pdv').length, 2);
+  assert.equal(ins[3].value, '', '상대방 칸은 채우지 않는다'); assert.equal(ins[4].value, '');
+  assert.ok(w.document.querySelector('#draft .fld-badge'));
+});
+test('PDV: 거부하면 직접 입력 안내, 비서 없이 열면 요청도 버튼도 없다', async () => {
+  const posts = []; let op;
+  const a = await openForm({ ac: true, pre: (win) => { op = { closed: false, postMessage: (m) => posts.push(m) }; Object.defineProperty(win, 'opener', { value: op }); } });
+  a.w.dispatchEvent(Object.assign(new a.w.Event('message'), { data: { type: 'GWP_PDV_RESPONSE', request_id: posts[0].request_id, approved: false, values: null }, origin: 'https://hondi.net', source: op })); await tick();
+  assert.match(a.w.document.getElementById('pdvNote').textContent, /허용되지 않았습니다/);
+  assert.equal(a.w.document.querySelector('#draft input.fld').value, '');
+  const b = await openForm();
+  assert.equal(b.w.document.getElementById('pdvBtn').hidden, true);
+  assert.match(b.w.document.getElementById('pdvNote').textContent, /혼디 이용자가 아니면/);
 });
