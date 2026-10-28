@@ -60,11 +60,12 @@ test('질문 → 엔진: 서류 DB에서 찾으면 그 서류의 엔진, 아니�
   assert.equal(pick(''), 'lawyer');
 });
 
-test('홈: 입력하면 질문 그대로 작성 화면으로 간다(직역 선택 없음)', () => {
+test('홈: 엔터를 누르면 페이지를 옮기지 않고 이 화면에서 작성을 시작한다', () => {
   const w = load('index.html').window; let went = ''; w.NaviLaw.go = (u) => { went = u; };
   w.document.getElementById('askInput').value = '소장 작성';
   w.document.getElementById('askForm').requestSubmit();
-  assert.equal(went, 'write.html?q=' + encodeURIComponent('소장 작성'));
+  assert.equal(went, '');
+  assert.ok(w.document.querySelector('iframe.gen-frame'));
   assert.equal(w.document.querySelectorAll('.door').length, 0);
 });
 
@@ -496,4 +497,25 @@ test('바닥글: 보조 도구 고지 문구는 없고 링크만 남는다(고�
     const f = read(p).match(/<footer[\s\S]*?<\/footer>/)[0];
     assert.doesNotMatch(f, /법률 자문이나 대리를 제공하지/, p); assert.match(f, /혼디넷/, p);
   }
+});
+
+test('홈: AI 초안이 오면 같은 화면에 입력 칸으로 펼치고 PDV 값을 채운다', () => {
+  const w = load('index.html').window; w.NaviLaw.go = () => { throw new Error('페이지 이동 금지'); };
+  w.document.getElementById('askInput').value = '농지취득';
+  w.document.getElementById('askForm').requestSubmit();
+  const fr = w.document.querySelector('iframe.gen-frame'), sent = [];
+  Object.defineProperty(fr, 'contentWindow', { value: { postMessage: (m) => sent.push(m) } });
+  const fire = (data, origin = 'https://hondi.net') => w.dispatchEvent(Object.assign(new w.Event('message'), { data, origin, source: fr.contentWindow }));
+  fire({ type: 'expert-embed-ready' });
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /초안을 작성해 주세요/);
+  const md = '~~~markdown\n---\ndoc_type: 농지취득자격증명신청서\nstatus: DRAFT\nopen_items: 3\n---\n\n# 농지취득자격증명신청서\n\n- 신청인 성명: [확인 필요: 성명]\n- 주소: [확인 필요: 주소]\n- 취득 목적: [확인 필요: 취득 목적]\n~~~\n';
+  fire({ type: 'expert-embed-reply', text: md }, 'https://evil.example');
+  assert.equal(w.document.querySelectorAll('#docPrevIn [data-act]').length, 0);
+  fire({ type: 'expert-embed-reply', text: md });
+  const inputs = w.document.querySelectorAll('#docPrevIn input.fld');
+  assert.equal(inputs.length, 3);
+  assert.equal(inputs[0].value, '도 영민');
+  assert.equal(inputs[2].value, '');
+  assert.ok(w.document.querySelector('#docPrevIn [data-act="download"]'));
 });
