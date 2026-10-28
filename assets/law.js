@@ -288,10 +288,13 @@
   }
   function stripFront(md) { return String(md || '').replace(/^---[ \t]*\n[\s\S]*?\n---[ \t]*(?:\n|$)/, '').replace(/^\s+/, ''); }
   function blankKey(label, hint) { return label + '\u2502' + hint; }
-  /** pdvKind("신청인 성명","") → 'name' | 'address' | 'phone' | null — 의뢰인 본인의 인적사항으로 볼 수 있는 칸만. 상대방·부동산 주소·법인 등은 PDV 로 채우지 않는다. */
+  /** pdvKind("신청인 성명","") → 'name' | 'address' | 'phone' | 'email' | 'rrn' | null — 의뢰인 본인의 인적사항으로 볼 수 있는 칸만. 상대방·부동산 주소·법인 등은 PDV 로 채우지 않는다. */
   function pdvKind(label, hint) {
     var t = String(label || '') + ' ' + String(hint || '');
-    if (SENSITIVE_RE.test(t) || NOT_SELF_RE.test(t)) return null;
+    if (NOT_SELF_RE.test(t)) return null;
+    if (/(주민등록번호|주민번호)/.test(t)) return 'rrn';   // 의뢰인 본인 칸. 실제 PDV 에는 요청하지 않는다
+    if (SENSITIVE_RE.test(t)) return null;
+    if (/(이메일|전자우편|e-?mail)/i.test(t)) return 'email';
     if (/(성명|이름)/.test(t)) return 'name';
     if (/주소/.test(t)) return 'address';
     if (/(연락처|전화|휴대)/.test(t)) return 'phone';
@@ -350,7 +353,7 @@
     var pid = qs.get('persona') || '', fieldName = '';
     var st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: '', kind: '', vals: {}, pdv: {} };   // vals: 칸별 입력값(key→값), pdv: PDV 로 채운 칸. kind 'issued' = 발급 서류(초안 대신 발급 안내)
     var frame = null, ready = false, queue = [], busy = false, readyTimer = null, docsDb = null;
-    var pdvAuto = false, fields = [], drawSig = '', pdvReq = null, pdvStatus = '', chatOpen = false;
+    var nudged = false, pdvAuto = false, fields = [], drawSig = '', pdvReq = null, pdvStatus = '', chatOpen = false;
 
     /* 어느 엔진으로 쓸지는 화면에 드러내지 않는다 — 주소의 persona(서류 목록이 정해 준 값) → 저장된 이어쓰기 → 서류 DB·질문 내용 순으로 정한다. */
     function boot(db) {
@@ -376,6 +379,7 @@
       } else {
         if (saved && saved.w > 0) { st = saved; st.vals = st.vals || {}; st.pdv = st.pdv || {}; }
         render();
+        if (st.md && st.kind !== 'issued' && !findAc()) simFill();
       }
     }
 
@@ -408,9 +412,9 @@
       bar.hidden = !has; if (!has) return;
       var n = fillCount(), sens = fields.some(function (f) { return f.sensitive; });
       $('fillSum').textContent = '입력할 항목 ' + fields.length + '개 중 ' + n + '개 입력' + (n === fields.length ? ' — 모두 입력했습니다.' : '. 아래 서식의 빈 칸에 직접 쓰시면 됩니다.') + (sens ? ' 주민등록번호 등은 이 화면을 닫으면 지워지며 저장되지 않습니다.' : '');
-      var wants = pdvWants(), ac = findAc();
+      var wants = pdvWants().filter(function (f) { return f.kind !== 'rrn'; }), ac = findAc();
       $('pdvBtn').hidden = !(ac && wants.length);
-      $('pdvNote').textContent = pdvStatus || (ac ? (wants.length ? '내 AI 비서의 PDV에 있는 성명·연락처·주소를 가져올 수 있습니다.' : '') : '혼디 이용자가 아니면 빈 칸에 직접 입력해 주십시오.');
+      $('pdvNote').textContent = pdvStatus || (ac ? (wants.length ? '내 AI 비서의 PDV에 있는 성명·연락처·주소를 가져올 수 있습니다.' : '') : (fillCount() ? '' : '혼디 이용자가 아니면 빈 칸에 직접 입력해 주십시오.'));
     }
     function onField(e) {
       var t = e.target; if (!t.classList || !t.classList.contains('fld')) return;
@@ -425,7 +429,15 @@
     function filledMd() { return fillBlanks(st.md, st.vals, 'text'); }
 
     /* ── 혼디 PDV (의뢰인의 AI 비서에게 요청) ── */
-    var AC_ORIGINS = [HONDI, 'https://www.hondi.net'], PDV_NAME = { name: '이름', phone: '연락처', address: '주소' };
+    var AC_ORIGINS = [HONDI, 'https://www.hondi.net'], PDV_NAME = { name: '이름', phone: '연락처', address: '주소', email: '이메일' };
+    /* 시험용(시뮬레이션) 의뢰인 — 실제로는 의뢰인의 PDV 에서 가져온다. 비서가 연 창이 아닐 때 이 값으로 채운다. */
+    var SIM_CLIENT = { name: '도영민', address: '제주시 한림읍 금능남로 3', phone: '010-9662-7170', email: 'tensor.city@gmail.com', rrn: '641005-1******' };
+    function simFill() {
+      var n = 0;
+      pdvWants().forEach(function (f) { var v = SIM_CLIENT[f.kind]; if (v) { st.vals[f.key] = v; st.pdv[f.key] = 1; n++; } });
+      pdvStatus = n ? '의뢰인의 PDV에서 ' + n + '개 항목을 채웠습니다. 맞는지 확인해 주십시오.' : '';
+      if (n) { drawSig = ''; save(); render(); }
+    }
     function findAc() {
       var o = ''; try { o = sessionStorage.getItem('navilaw_ac') || ''; } catch (e) { o = ''; }
       try { if (!o || !window.opener || window.opener.closed) return ''; } catch (e) { return ''; }
@@ -433,8 +445,9 @@
     }
     function pdvWants() { return fields.filter(function (f) { return f.kind && !valOf(f); }); }
     function pdvFill(auto) {
-      var ac = findAc(), want = pdvWants(), names = [];
-      if (!ac || !want.length || pdvReq) return;
+      var ac = findAc(), want = pdvWants().filter(function (f) { return f.kind !== 'rrn'; }), names = [];
+      if (!ac) { simFill(); return; }
+      if (!want.length || pdvReq) return;
       want.forEach(function (f) { var n = PDV_NAME[f.kind]; if (names.indexOf(n) < 0) names.push(n); });
       var rid = 'law-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       pdvReq = { rid: rid, ac: ac, want: want, timer: setTimeout(function () { if (pdvReq && pdvReq.rid === rid) { pdvReq = null; pdvStatus = 'AI 비서의 응답이 없어 가져오지 못했습니다. 직접 입력해 주십시오.'; updateFill(); } }, 180000) };
@@ -531,22 +544,27 @@
       else if (ex && st.w < 6) st.w = 6;
       if (ex) { st.md = ex.md; st.title = docTitle(ex.md); st.at = Date.now(); }
       st.rest = cleanRest(text, ex ? ex.raw : '');
+      if (!ex && !st.md && !nudged) {   // 초안 대신 인사·질문이 왔으면 묻지 않고 바로 쓰라고 한 번 더 요청한다
+        nudged = true; st.rest = ''; save();
+        send('질문하지 말고 지금 바로 「' + (st.doc || '요청한 서류') + '」 초안 전체를 ~~~markdown 코드 블록(앞머리 포함)으로 작성해 주세요. 모르는 항목은 [확인 필요: 항목명] 빈 칸으로 두세요.');
+        return;
+      }
       save(); setBusy(false);
       if (ex) {
         if (!chatOpen) $('chatDot').hidden = false;
         $('draftPane').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (!pdvAuto) { pdvAuto = true; pdvFill(true); }   // 처음 초안이 나오면 한 번만 AI 비서에게 인적사항을 요청한다
+        if (!pdvAuto || !findAc()) { pdvAuto = true; pdvFill(true); }   // 처음 초안이 나오면 한 번만 AI 비서에게 인적사항을 요청한다
       }
     }
 
     function startMessage(doc, memo, q) {
-      var tail = ' 모르는 항목은 묻지 말고 빈 칸으로 남긴 뒤, 초안 아래 빈 칸 표로 알려 주세요.';
+      var tail = ' 인사나 질문 없이 지금 바로 초안 전체를 작성해 주세요. 의뢰인의 성명·주소·전화번호·이메일·주민등록번호는 의뢰인의 PDV에서 자동으로 채워지므로 [확인 필요: 항목명] 빈 칸으로 두고, 그 밖에 모르는 항목은 묻지 말고 빈 칸으로 남긴 뒤, 초안 아래 빈 칸 표로 알려 주세요.';
       if (q) return '다음 요청에 맞는 서류 초안을 작성해 주세요: ' + q + '.' + tail;
       return '「' + doc + '」 초안을 작성해 주세요.' + (memo ? ' 알고 있는 내용: ' + memo + '.' : '') + tail;
     }
     function begin(doc, memo, q) {
       var N = window.NaviLawDocs, it = !q && doc && N.findIssued ? N.findIssued(docsDb, doc) : (q && N.findIssuedAsk ? N.findIssuedAsk(docsDb, q) : null);   // 받아서 첨부하는 서류는 초안이 아니라 발급 안내로 시작한다 — 서류명만 고른 경우와 "…떼는 법" 같은 발급 문의 문장
-      st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '', vals: {}, pdv: {} }; drawSig = ''; pdvStatus = '';
+      st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '', vals: {}, pdv: {} }; drawSig = ''; pdvStatus = ''; nudged = false; pdvAuto = false;
       save(); render(); send(it ? N.issuedAsk(it, memo, q) : startMessage(doc, memo, q));
     }
 
@@ -593,22 +611,11 @@
   /* ── 나비로의 특징 배너 — "다시 보지 않기"를 누르면 이 브라우저에서 다시 나오지 않는다(문구를 바꾸면 키의 버전을 올려 다시 보이게 한다). ── */
   var PROMO_KEY = 'navilaw_promo_v1';
   function initPromo() {
-    var el = $('promo'), tab = $('promoTab'); if (!el || !tab) return;
-    var seen = false;
-    try { seen = localStorage.getItem(PROMO_KEY) === '1'; } catch (e) { /* 저장을 못 하면 처음 온 것으로 본다 */ }
-    function setOpen(open, focus) {
-      el.classList.toggle('open', open);
-      el.setAttribute('aria-hidden', open ? 'false' : 'true');
-      tab.setAttribute('aria-expanded', open ? 'true' : 'false');
-      if (focus) { try { (open ? $('promoX') : tab).focus(); } catch (e) { /* 무시 */ } }
-    }
-    tab.addEventListener('click', function () { setOpen(true, true); });
-    $('promoX').addEventListener('click', function () { setOpen(false, true); });
-    $('promoClose').addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } setOpen(false, true); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && el.classList.contains('open')) setOpen(false, true); });
-    var tb = $('towerBtn'), tip = $('towerTip');
-    if (tb && tip) tb.addEventListener('click', function () { var o = tip.hidden; tip.hidden = !o; tb.setAttribute('aria-expanded', o ? 'true' : 'false'); });
-    if (!seen) setTimeout(function () { setOpen(true, false); }, 350);   // 처음 오신 분께는 한 번 밀어서 보여 드린다
+    var el = $('promo'); if (!el) return;
+    var box = el.parentNode && el.parentNode.className === 'promo-wrap' ? el.parentNode : el;
+    try { if (localStorage.getItem(PROMO_KEY) === '1') { box.remove(); return; } } catch (e) { /* 저장을 못 하면 그냥 보인다 */ }
+    var b = $('promoClose');
+    if (b) b.addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } box.remove(); });
   }
 
   /* 나만의 AI 비서(hondi.net)가 ?gwp=1&origin=… 로 연 창이면 그 출처를 기억한다 — 이후 다른 쪽으로 이동해도 window.opener 로 비서와 이야기할 수 있다. */
