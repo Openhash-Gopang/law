@@ -299,11 +299,12 @@
 
   function initWrite() {
     var pid = qs.get('persona') || '', fieldName = '';
-    var st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: '' };
-    var frame = null, ready = false, queue = [], busy = false, readyTimer = null;
+    var st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: '', kind: '' };   // kind 'issued' = 발급 서류(초안 대신 발급 안내)
+    var frame = null, ready = false, queue = [], busy = false, readyTimer = null, docsDb = null;
 
     /* 어느 엔진으로 쓸지는 화면에 드러내지 않는다 — 주소의 persona(서류 목록이 정해 준 값) → 저장된 이어쓰기 → 서류 DB·질문 내용 순으로 정한다. */
     function boot(db) {
+      docsDb = db;
       var index = db ? window.NaviLawDocs.createIndex(db) : null, fields = db ? db.fields : null;
       var doc = (qs.get('doc') || '').slice(0, 80), q = (qs.get('q') || '').slice(0, 600);
       var fresh = !!(doc || q), saved = fresh ? null : storeGet('navilaw_write_last');
@@ -330,16 +331,24 @@
 
     function save() { st.pid = pid; storeSet('navilaw_write_last', st); }
     function render() {
-      var ph = phaseOf(st.w || 1), started = st.w > 0;
+      var ph = phaseOf(st.w || 1), started = st.w > 0, issued = st.kind === 'issued';
+      $('phases').style.display = issued ? 'none' : '';   // .phases 는 display:grid 라 hidden 속성이 먹지 않는다
+      $('chatH').textContent = issued ? '궁금한 점은 여기에 말씀하십시오' : '수정·보완은 여기에 말씀하십시오';
       $('phases').innerHTML = PHASES.map(function (n, i) {
         var cls = !started ? '' : (i + 1 < ph ? 'done' : i + 1 === ph ? 'on' : '');
         return '<div class="phase ' + cls + '">' + (i + 1) + '. ' + esc(n) + '</div>';
       }).join('');
-      var hasDraft = !!st.md;
-      $('draft').innerHTML = hasDraft ? mdToHtml(st.md) : '<div class="empty">' + (busy ? 'AI가 초안을 작성하는 중입니다…' : '서류를 정하면 여기에 초안이 나타납니다.') + '</div>';
-      $('draftTitle').textContent = hasDraft ? st.title : '초안';
+      var hasDraft = !!st.md && !issued;
+      if (issued) {
+        $('draft').innerHTML = st.rest ? mdToHtml(st.rest) : '<div class="empty">' + (busy ? 'AI가 발급 안내를 작성하는 중입니다…' : '발급 안내가 여기에 나타납니다.') + '</div>';
+        $('draftTitle').textContent = '발급 안내';
+      } else {
+        $('draft').innerHTML = hasDraft ? mdToHtml(st.md) : '<div class="empty">' + (busy ? 'AI가 초안을 작성하는 중입니다…' : '서류를 정하면 여기에 초안이 나타납니다.') + '</div>';
+        $('draftTitle').textContent = hasDraft ? st.title : '초안';
+      }
       var rest = $('blanks');
-      if (st.rest) { rest.hidden = false; $('blanksTitle').textContent = ph <= 2 ? '남은 빈 칸과 수정·보완' : '안내'; $('blanksBody').innerHTML = mdToHtml(st.rest); }
+      if (issued) rest.hidden = true;
+      else if (st.rest) { rest.hidden = false; $('blanksTitle').textContent = ph <= 2 ? '남은 빈 칸과 수정·보완' : '안내'; $('blanksBody').innerHTML = mdToHtml(st.rest); }
       else rest.hidden = true;
       var a = [];
       if (hasDraft) {
@@ -349,11 +358,12 @@
         else if (st.w === 7) a.push('<button type="button" class="btn sm line" data-act="submitted">제출을 마쳤습니다</button>');
         else if (st.w === 8) a.push('<button type="button" class="btn sm line" data-act="paid">납부를 마쳤습니다(또는 해당 없음)</button>');
       }
+      if (issued && st.rest) a.push('<button type="button" class="btn sm line" data-act="copy">복사</button>');
       $('actions').innerHTML = a.join('');
       $('busy').hidden = !busy;
       $('startBox').hidden = started;
       $('startSum').hidden = !started;
-      $('startSumText').textContent = st.doc ? '서류: ' + st.doc : '서류 작성 중';
+      $('startSumText').textContent = st.doc ? '서류: ' + st.doc + (issued ? ' · 발급 안내' : '') : '서류 작성 중';
     }
 
     function setBusy(v) { busy = v; render(); }
@@ -368,6 +378,7 @@
     function flush() { if (readyTimer) { clearTimeout(readyTimer); readyTimer = null; } $('connWarn').hidden = true; while (queue.length) post(queue.shift()); }
 
     function onReply(text) {
+      if (st.kind === 'issued') { st.rest = cleanRest(text, ''); st.at = Date.now(); save(); setBusy(false); return; }   // 발급 안내는 답변 전체를 안내 칸에 보여 준다
       var m = STATUS_RE.exec(text), ex = extractDoc(text);
       if (m) st.w = parseInt(m[1], 10);
       else if (ex && st.w < 6) st.w = 6;
@@ -383,8 +394,9 @@
       return '「' + doc + '」 초안을 작성해 주세요.' + (memo ? ' 알고 있는 내용: ' + memo + '.' : '') + tail;
     }
     function begin(doc, memo, q) {
-      st = { w: 1, doc: doc || (q ? q.slice(0, 40) : ''), md: '', title: '', at: 0, rest: '', pid: pid };
-      save(); render(); send(startMessage(doc, memo, q));
+      var it = !q && doc && window.NaviLawDocs.findIssued ? window.NaviLawDocs.findIssued(docsDb, doc) : null;   // 받아서 첨부하는 서류는 초안이 아니라 발급 안내로 시작한다
+      st = { w: 1, doc: it ? it.t : (doc || (q ? q.slice(0, 40) : '')), md: '', title: '', at: 0, rest: '', pid: pid, kind: it ? 'issued' : '' };
+      save(); render(); send(it ? window.NaviLawDocs.issuedAsk(it, memo) : startMessage(doc, memo, q));
     }
 
     function bind() {
@@ -399,7 +411,7 @@
         if (!doc && !memo) { $('fDoc').focus(); toast('작성할 서류를 적어 주세요.'); return; }
         begin(doc, memo, doc ? '' : memo);
       });
-      $('newDoc').addEventListener('click', function () { st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: pid }; save(); $('fDoc').value = ''; $('fMemo').value = ''; render(); $('fDoc').focus(); });
+      $('newDoc').addEventListener('click', function () { st = { w: 0, doc: '', md: '', title: '', at: 0, rest: '', pid: pid, kind: '' }; save(); $('fDoc').value = ''; $('fMemo').value = ''; render(); $('fDoc').focus(); });
       $('actions').addEventListener('click', function (e) {
         var b = e.target.closest('button[data-act]'); if (!b) return;
         var act = b.getAttribute('data-act');
@@ -409,7 +421,7 @@
           setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         } else if (act === 'copy') {
           var done = function () { toast('복사했습니다.'); };
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(st.md).then(done, function () { toast('복사하지 못했습니다.'); });
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(st.kind === 'issued' ? st.rest : st.md).then(done, function () { toast('복사하지 못했습니다.'); });
           else toast('이 브라우저에서는 복사할 수 없습니다. 내려받기를 이용해 주세요.');
         } else if (act === 'next') send('W-6 작성된 서류를 검증했고 제출 준비를 진행하겠습니다. 승인합니다.');
         else if (act === 'submitted') send('W-7 제출을 직접 마쳤습니다. W-8로 진행해 주세요.');

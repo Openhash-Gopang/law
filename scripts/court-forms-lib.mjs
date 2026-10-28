@@ -27,6 +27,9 @@ export function parseTotal(html) {
   return m ? Number(m[1].replace(/,/g, '')) : 0;
 }
 
+/** 제목에 붙은 시행일 꼬리표 "(2020. 1. 20. 시행)"·"(26. 7. 1.시행)"을 뗀다 — 자동 완성에 날짜가 보이면 어수선하고, 같은 양식이 날짜만 달라 따로 보이는 것도 막는다. */
+export const stripEffective = (t) => String(t || '').replace(/\s*\(\s*\d{2,4}\.\s*\d{1,2}\.\s*\d{1,2}\.?\s*(?:부터\s*)?시행\s*\)/g, '').replace(/\s+/g, ' ').trim();
+
 /** 제목 "[개인회생] (부산회생법원) [양식1-01] 변경 채권자목록" → { cat, court, no, t } (양식이 아니면 null) */
 export function splitCourtTitle(raw) {
   const s = String(raw || '').replace(/\s+/g, ' ').trim();
@@ -35,6 +38,7 @@ export function splitCourtTitle(raw) {
   let t = m[3].trim(), no = '';
   const n = t.match(/^\[\s*(양식[^\]]*)\]\s*(.+)$/);
   if (n) { no = n[1].replace(/\s+/g, ''); t = n[2].trim(); }
+  t = stripEffective(t);
   t = t.replace(/\s*(?:\bhwp\b|\bpdf\b|한글|파일)(?:\s*(?:\bhwp\b|\bpdf\b|한글|파일))*\s*$/i, '').trim();   // 제목 끝에 붙은 파일 형식 표시
   if (!t || t.length < 2) return null;
   return { cat: m[1].trim(), court: (m[2] || '').trim(), no, t };
