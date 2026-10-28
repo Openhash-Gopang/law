@@ -8,6 +8,9 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => JSON.parse(readFileSync(join(ROOT, p), 'utf8'));
 
+// 사용자가 쓰는 서류가 아닌 것은 서류 DB 에서 뺀다(원본 수집 파일에는 그대로 남아 있다): 기관 내부 장부(…대장·명부·발송부·접수부·일지)와 법원의 안내문·작성요령·예시.
+export const isLedger = (t) => { t = String(t).trim(); return /(대장|명부|발송부|접수부|관리부|일지)\s*(\([^)]*\)|\[[^\]]*\])?$/.test(t) && !/(신청서|신고서|청구서|동의서)\s*[,·ㆍ]/.test(t); };   // "신청서, … 동의자 명부"처럼 서식 뒤에 명부가 따라붙은 것은 서식이므로 남긴다
+export const isCourtGuide = (t) => { t = String(t); const guide = /(안내서|안내문|작성요령|작성례|작성안내|양식 리스트|제도 안내|제도에 대한 안내|\(예시\)|표지|^\d+-\d+\.)/.test(t), form = (/(신청서|청구서|신고서|진술서|재산목록)(?!류)/.test(t) || /(신청|청구|신고)\s*(\([^)]*\))?$/.test(t)) && !/(표지|양식 리스트|\(예시\))/.test(t); return guide && !form; };   // 안내문·작성요령·예시·표지만 뺀다 — "…신청서 및 안내문"·"재산목록 및 작성요령"처럼 서식이 함께 있는 것은 남긴다
 export function buildDocsDb(opts = {}) {
   const scr = read('data/scrivener.json'), law = read('data/lawyer.json'), aliases = read('data/docs-aliases.json');
   const docs = [];
@@ -35,7 +38,7 @@ export function buildDocsDb(opts = {}) {
   const stripEff = (t) => String(t).replace(/\s*\(\s*\d{2,4}\.\s*\d{1,2}\.\s*\d{1,2}\.?\s*(?:부터\s*)?시행\s*\)/g, '').replace(/\s+/g, ' ').trim();   // 제목 끝의 시행일 꼬리표(scripts/court-forms-lib.mjs 의 stripEffective 와 같다)
   for (const f0 of court) {
     const f = { ...f0, t: stripEff(f0.t) };
-    if (!f.t || have.has(nk(f.t))) continue;
+    if (!f.t || isCourtGuide(f.t) || have.has(nk(f.t))) continue;
     have.add(nk(f.t));
     const where = f.n > 1 && f.court ? f.court + ' 외 ' + (f.n - 1) + '곳' : (f.court || '법원');
     const row = { t: f.t, p: 'court', pid: 'lawyer', c: ['법원 양식', f.cat, where].filter(Boolean).join(' · '), d: [f.no, '대법원 전자민원센터 양식모음'].filter(Boolean).join(' · ') };
@@ -45,7 +48,7 @@ export function buildDocsDb(opts = {}) {
   // 법제처 별표·서식(민원서식) — data/law-forms.json 이 있을 때만 합친다(scripts/fetch-law-forms.mjs 가 만든다). 발급 서류와 이름이 같으면 발급 서류만 남긴다.
   let extra = opts.forms; if (!extra) { try { extra = read('data/law-forms.json').forms || []; } catch { extra = []; /* 아직 수집 전 */ } }
   for (const f of extra) {
-    if (issuedKeys.has(nk(f.t))) continue;
+    if (issuedKeys.has(nk(f.t)) || isLedger(f.t)) continue;
     const more = f.n > 1 && f.law ? f.law + ' 외 ' + (f.n - 1) + '건' : (f.law || '민원서식');
     const row = { t: f.t, p: 'minwon', pid: 'lawyer', c: more, d: [f.no, f.dept, f.src].filter(Boolean).join(' · ') };
     const a = aliasFor(f.t); if (a.length) row.a = a;

@@ -70,8 +70,8 @@ test('서버 IP 미등록·HTML 응답은 분명한 오류로 멈춘다', async 
 
 test('서류 DB: law-forms.json 이 있으면 "민원서식"으로 합치고, 없으면 그대로다', () => {
   const db = buildDocsDb();
-  assert.ok(db.docs.length >= 399);
-  assert.ok(db.docs.filter((d) => !['minwon', 'issued', 'court'].includes(d.p)).length === 399);
+  assert.ok(db.docs.length >= 441);
+  assert.ok(db.docs.filter((d) => !['minwon', 'issued', 'court'].includes(d.p)).length === 441);
 });
 
 test('일반 이름(신청서·증명서 등)은 버리고, 서식명이 같은 것은 법령을 3개까지만 남겨 합친다', () => {

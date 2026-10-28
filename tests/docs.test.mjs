@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
-import { buildDocsDb, serialize } from '../scripts/build-docs-index.mjs';
+import { buildDocsDb, serialize, isLedger, isCourtGuide } from '../scripts/build-docs-index.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -20,14 +20,14 @@ test('서류 DB: data/docs.json 이 서류 목록(scrivener·lawyer.json)에서 
   assert.equal(read('data/docs.json'), serialize(buildDocsDb()), 'node scripts/build-docs-index.mjs 를 실행하세요');
 });
 
-test('서류 DB: 핵심 서류는 법무사 98 + 변호사 공통 19 + 세부 분야 282 = 399건, 분야 46개이고, 배포본은 거기에 민원서식만 더한다', () => {
-  assert.equal(CORE.docs.length, 399);
+test('서류 DB: 핵심 서류는 법무사 98 + 변호사 공통 61(노무·세무·특허 36 + 계약·생활 6 포함) + 세부 분야 282 = 441건, 분야 46개이고, 배포본은 거기에 민원서식만 더한다', () => {
+  assert.equal(CORE.docs.length, 441);
   assert.equal(CORE.docs.filter((d) => d.p === 'scrivener').length, 98);
-  assert.equal(CORE.docs.filter((d) => d.p === 'lawyer' && d.pid === 'lawyer').length, 19);
+  assert.equal(CORE.docs.filter((d) => d.p === 'lawyer' && d.pid === 'lawyer').length, 61);
   assert.equal(CORE.fields.length, 46);
   assert.ok(!CORE.docs.some((d) => d.t === '유의'));
   for (const d of CORE.docs) assert.ok(d.t && d.p && d.pid && d.c, JSON.stringify(d));
-  assert.equal(db.docs.filter((d) => !['minwon', 'issued', 'court'].includes(d.p)).length, 399, '배포본의 핵심 서류 수');
+  assert.equal(db.docs.filter((d) => !['minwon', 'issued', 'court'].includes(d.p)).length, 441, '배포본의 핵심 서류 수');
   assert.equal(db.fields.length, 46);
   for (const d of db.docs.filter((x) => x.p === 'minwon')) assert.ok(d.t && d.c, JSON.stringify(d));
 });
@@ -65,7 +65,7 @@ test('발급 서류: 첨부서류 이름과 일상어로 찾는다 — 법제처
 test('발급 서류: 자동 완성에는 발급처가 보이고, 법제처 민원서식과 이름이 같으면 발급 서류 한 건만 남는다', () => {
   const hit = D.search(WITH_ISSUED, '가족관계증명서', { limit: 1 })[0];
   assert.match(hit.c, /^발급 서류 · .*정부24/);
-  const dup = buildDocsDb({ forms: [{ t: '인감증명서', law: '인감증명법 시행규칙', laws: ['인감증명법 시행규칙'], n: 1, dept: '행정안전부', src: '법령' }, { t: '인감증명 발급대장', law: 'X', n: 1 }] });
+  const dup = buildDocsDb({ forms: [{ t: '인감증명서', law: '인감증명법 시행규칙', laws: ['인감증명법 시행규칙'], n: 1, dept: '행정안전부', src: '법령' }, { t: '인감증명 위임신청서', law: 'X', n: 1 }] });
   assert.equal(dup.docs.filter((d) => d.t === '인감증명서').length, 1);
   assert.equal(dup.docs.find((d) => d.t === '인감증명서').p, 'issued');
   assert.equal(dup.docs.filter((d) => d.p === 'minwon').length, 1, '이름이 다른 민원서식은 그대로');
@@ -118,7 +118,7 @@ test('직역 제한과 같은 이름 서류 중복 제거, 세부 분야 제안'
   assert.equal(D.search(idx, '민사', { persona: 'scrivener' }).filter((e) => e.kind === 'field').length, 0);
 });
 
-test('성능: 399건 색인 위 검색이 1회 5ms 안팎', () => {
+test('성능: 441건 색인 위 검색이 1회 5ms 안팎', () => {
   const t0 = Date.now(); for (let i = 0; i < 200; i++) D.search(idx, i % 2 ? '근저' : '소유권이전', { limit: 8 });
   assert.ok((Date.now() - t0) / 200 < 5, '느림');
 });
@@ -234,4 +234,61 @@ test('발급 안내 요청문: 초안을 쓰지 말고 발급처·준비물·대
   assert.match(D.issuedAsk(D.findIssued(dbI, '가족관계증명서'), '2018년 이혼'), /알고 있는 내용: 2018년 이혼\.$/);
   const s = D.issuedAsk(D.findIssued(dbI, '안심상속'), '');
   assert.match(s, /신청해서 결과를 받는 서비스입니다/); assert.doesNotMatch(s, /발급받아 첨부하는 서류/);
+});
+
+// ── 검색 보정: 붙여 쓴·띄어 쓴·접미사 붙은 말, 문장 속 서류명 ──
+const top = (q, n = 3, ix = idx) => Array.from(titles(D.search(ix, q, { limit: n })));   // vm 안에서 만든 배열은 다른 realm 이라 deepEqual 전에 옮긴다
+test('검색 보정: 결과가 없을 때만 끝의 장·서·신청을 떼고(유언장·개명신청), 띄어 쓴 단어가 모두 든 서류를 찾는다', () => {
+  assert.ok(top('유언장').some((t) => t.includes('유언서')), top('유언장').join('/'));
+  assert.ok(top('개명신청').some((t) => t.startsWith('개명허가')));
+  assert.ok(top('대표이사 변경').some((t) => t.includes('회사 변경등기')));
+  assert.ok(top('소액 소송').some((t) => t.includes('소액사건')));
+  assert.ok(top('대여금 소송').some((t) => t.includes('대여금')));
+  assert.ok(top('임대차 해지 통보').some((t) => t.includes('내용증명')));
+  assert.ok(top('근저당권말소등기신청서').some((t) => t.includes('근저당권 변경·이전·말소')));
+  assert.ok(top('개인회생 신청서').some((t) => t.startsWith('개인회생 개시신청서')));
+  assert.ok(top('월세 계약서').some((t) => t.includes('임대차')));
+  assert.deepEqual(top('소장', 1), ['소장'], '바로 찾아지면 보정은 끼어들지 않는다');
+  assert.deepEqual(top('쿼카쿼카 서류', 5), [], '엉뚱한 말은 여전히 결과가 없다');
+});
+
+test('검색 보정: 노무·세무·특허·계약 서류도 일상어로 찾는다', () => {
+  for (const [q, want] of [['임금체불', '임금체불'], ['퇴직금', '퇴직금'], ['부당해고', '부당해고'], ['실업급여', '구직급여'], ['세금 환급', '경정청구'], ['종부세', '종합부동산세'], ['특허 출원', '특허출원서'], ['상표', '상표등록'], ['임대차계약서', '임대차계약서'], ['부동산 매매계약서', '매매계약서'], ['연대보증', '연대보증'], ['층간소음', '층간소음'], ['소송비용 확정', '소송비용액'], ['변호사 선임', '선임']])
+    assert.ok(top(q, 4).some((t) => t.includes(want)), q + ' → ' + top(q, 4).join(' / '));
+});
+
+test('best(): 부동산 속 "동산"·"신청서" 같은 일반어·짧은 말에는 걸리지 않는다', () => {
+  assert.equal(D.best(idx, '부동산 매매계약서').t, '부동산 매매계약서');
+  assert.ok(!/동산·채권담보/.test(D.best(idx, '부동산 매매계약서').t));
+  assert.ok(D.best(idx, '개명신청서').t.startsWith('개명허가'));
+  assert.equal(D.best(idx, '신청서 작성해 주세요'), null, '일반어만으로는 서류를 정하지 않는다');
+  assert.equal(D.best(idx, '월세를 안 내는 세입자에게 내용증명 보내려고요').t, '내용증명');
+});
+
+test('발급 문의 판별: 서류명 + 발급 문의 표현일 때만 발급 안내, 초안 요청이나 서류명만 짧게 쓴 말은 아니다', () => {
+  const dbI = buildDocsDb({ forms: [], court: [] }), f = (t) => D.findIssuedAsk(dbI, t);
+  for (const [t, want] of [['주민등록등본 떼는 법', '주민등록등본'], ['가족관계증명서 어디서 발급받아요?', '가족관계증명서'], ['인감증명서 발급 준비물', '인감증명서'], ['법인등기부등본 인터넷으로 뽑으려면', '등기사항전부증명서(법인)'], ['재직증명서 발급 방법', '재직증명서'], ['소장에 붙일 가족관계증명서 발급 수수료', '가족관계증명서']])
+    assert.equal(f(t)?.t, want, t);
+  for (const t of ['가족관계증명서를 붙인 소장 작성', '가족관계증명서 초안 써줘', '소장 발급', '등본 발급', '가족관계증명서', '', '쿼카 발급 방법']) assert.equal(f(t), null, JSON.stringify(t));
+  assert.equal(D.findIssuedAsk(null, '주민등록등본 떼는 법'), null);
+  const a = D.issuedAsk(D.findIssued(dbI, '주민등록등본'), '', '주민등록등본 떼는 법');
+  assert.match(a, /사용자의 원래 요청: 「주민등록등본 떼는 법」/);
+  assert.doesNotMatch(D.issuedAsk(D.findIssued(dbI, '주민등록등본'), ''), /원래 요청/);
+});
+
+test('서류 DB: 기관 내부 장부(…대장·명부·접수부)와 법원 안내문은 빼고, 서식이 함께 있는 것·사용자가 쓰는 서식은 남긴다', () => {
+  for (const t of ['인감증명서발급대장', '(1급ㆍ2급) 응급구조사자격등록대장', '국외부재자신고서 접수부', '임대사업자 등록대장', '건축·대수선·용도변경 허가(신고)대장']) assert.equal(isLedger(t), true, t);
+  for (const t of ['건축물대장 말소신청서', '건물번호 (부여, 변경, 폐지) 신청서, 건물번호 변경 동의자 명부', '사업자등록 신청서', '확정일자 신청서']) assert.equal(isLedger(t), false, t);
+  for (const t of ['민사소송절차안내서(소액)', '개인회생절차 개시결정안내문', '변제계획안 작성요령', '청구원인 소명자료 목록(예시)', '허가신청서 양식 리스트', '변경 채권자목록 및 변제계획안 수정허가신청서 표지', '99-3.상속재산 파산제도 안내']) assert.equal(isCourtGuide(t), true, t);
+  for (const t of ['재산목록 및 작성요령', '주택담보대출채권 채무재조정 프로그램 지원신청서 및 안내문', 'M&A 입찰안내서 및 우선협상대상자 선정기준 허가 신청', '지급명령신청서(일반)', '파산채권조사확정재판 안내 및 신청서']) assert.equal(isCourtGuide(t), false, t);
+  const mk = (t) => ({ t, law: 'X', n: 1 }), c = (t) => ({ t, cat: '민사', court: 'A', courts: ['A'], n: 1 });
+  const out = buildDocsDb({ issued: [], forms: [mk('인감증명서발급대장'), mk('사업자등록 신청서')], court: [c('민사소송절차안내서(소액)'), c('지급명령신청서(일반)')] });
+  assert.deepEqual(out.docs.filter((d) => ['minwon', 'court'].includes(d.p)).map((d) => d.t), ['지급명령신청서(일반)', '사업자등록 신청서']);
+});
+
+test('발급 서류: 재직·경력·졸업·성적증명서, 잔액증명서, 진단서, 교통사고사실확인원, 통장 사본 등은 발급 서류로 먼저 나온다', () => {
+  const ix = D.createIndex(db);
+  for (const [q, want] of [['재직증명서', '재직증명서'], ['경력증명서', '경력증명서'], ['졸업증명서', '졸업증명서'], ['성적증명서', '성적증명서'], ['잔고증명', '잔액증명서'], ['상해진단서', '진단서'], ['교통사고 확인원', '교통사고사실확인원'], ['자동차등록증', '자동차등록증'], ['통장사본', '통장 사본'], ['아포스티유', '아포스티유 확인서'], ['4대보험 가입확인서', '고용·산재보험 가입사실 확인서']]) {
+    const r = D.search(ix, q, { limit: 1 })[0]; assert.ok(r && r.t === want && r.p === 'issued', q + ' → ' + (r && r.t));
+  }
 });
