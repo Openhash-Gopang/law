@@ -476,3 +476,17 @@ test('"대법원 판결문 예상" 손잡이: "나비로의 특징" 위에 있�
     assert.ok(tabs.indexOf(v) < tabs.indexOf(d.getElementById('promoTab')), p + ': 특징 손잡이보다 위');
   }
 });
+
+test('패널 바깥을 누르면 밀어 넣는다: 특징 패널·대화창(홈·작성 화면), 패널 안쪽이나 손잡이를 누를 때는 그대로', async () => {
+  const w = load('index.html').window, d = w.document, el = d.getElementById('promo'), tab = d.getElementById('promoTab');
+  const click = (n) => n.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  tab.click(); assert.ok(el.classList.contains('open'), '손잡이를 누르면 열려 있다');
+  click(el.querySelector('h2')); assert.ok(el.classList.contains('open'), '안쪽을 눌러도 열려 있다');
+  click(d.querySelector('main')); assert.ok(!el.classList.contains('open'), '바깥을 누르면 닫힌다');
+  d.getElementById('chatFab').click(); const cp = d.getElementById('chatPanel'); assert.ok(cp.classList.contains('open'));
+  click(d.getElementById('chatHelp') || cp.querySelector('.chat-help')); assert.ok(cp.classList.contains('open'));
+  click(d.querySelector('main')); assert.ok(!cp.classList.contains('open'), '대화창도 바깥을 누르면 닫힌다');
+  const { w: ww } = await openForm(); const dd = ww.document, p2 = dd.getElementById('chatPanel');
+  dd.getElementById('chatFab').click(); assert.ok(p2.classList.contains('open'));
+  dd.getElementById('draft').dispatchEvent(new ww.MouseEvent('click', { bubbles: true })); assert.ok(!p2.classList.contains('open'), '작성 화면의 대화창도 닫힌다');
+});

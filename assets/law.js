@@ -138,6 +138,7 @@
     fab.addEventListener('click', function () { setChat(!panel.classList.contains('open')); });
     $('chatClose').addEventListener('click', function () { setChat(false); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && panel.classList.contains('open')) setChat(false); });
+    document.addEventListener('click', function (e) { if (panel.classList.contains('open') && !panel.contains(e.target) && !fab.contains(e.target)) setChat(false); });
   }
   /* ── 내 서류: 작성한 서류를 이 브라우저에 모아 둔다(최대 50건). 주민등록번호 등 민감한 칸의 값은 넣지 않는다. ── */
   var MY_KEY = 'navilaw_mydocs', MY_MAX = 50;
@@ -746,6 +747,7 @@
       $('chatClose').addEventListener('click', function () { setChat(false); });
       $('connOpen').addEventListener('click', function () { setChat(true); });
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && chatOpen) setChat(false); });
+      document.addEventListener('click', function (e) { if (chatOpen && !$('chatPanel').contains(e.target) && !$('chatFab').contains(e.target) && e.target !== $('connOpen')) setChat(false); });
       $('startForm').addEventListener('submit', function (e) {
         e.preventDefault();
         var doc = $('fDoc').value.trim(), memo = $('fMemo').value.trim();
@@ -789,6 +791,7 @@
     $('promoX').addEventListener('click', function () { setOpen(false, true); });
     $('promoClose').addEventListener('click', function () { try { localStorage.setItem(PROMO_KEY, '1'); } catch (e) { /* 이번만 닫힌다 */ } setOpen(false, true); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && el.classList.contains('open')) setOpen(false, true); });
+    document.addEventListener('click', function (e) { if (el.classList.contains('open') && !el.contains(e.target) && !tab.contains(e.target)) setOpen(false, false); });   // 패널 바깥을 누르면 밀어 넣는다
     var tb = $('towerBtn'), tip = $('towerTip');
     if (tb && tip) tb.addEventListener('click', function () { var o = tip.hidden; tip.hidden = !o; tb.setAttribute('aria-expanded', o ? 'true' : 'false'); });
     if (!seen) setTimeout(function () { setOpen(true, false); }, 350);   // 처음 오신 분께는 한 번 밀어서 보여 드린다
