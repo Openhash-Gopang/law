@@ -39,7 +39,7 @@ test('데이터: 법무사 12분류 98종, 변호사 8분류 61종·세부 분�
 });
 
 test('직역 구분 제거: 화면 어디에도 변호사/법무사 선택·표시가 없다', () => {
-  for (const p of ['docs.html', 'write.html']) assert.ok(!/변호사|법무사/.test(read(p).replace(/<footer[\s\S]*?<\/footer>/, '').replace(/<aside class="promo"[\s\S]*?<\/aside>/, '')), p);
+  for (const p of ['docs.html', 'write.html']) assert.ok(!/변호사|법무사/.test(read(p).replace(/<footer[\s\S]*?<\/footer>/, '')), p);
   const home = read('index.html').replace(/<meta[^>]*>/g, '');
   assert.ok(!/class="door|data-persona|변호사 보조|법무사 보조/.test(home));
   assert.ok(!/변호사|법무사/.test(read('assets/law.css')));
@@ -150,58 +150,37 @@ const PROMO_LINES = [
   '법원 API를 발급받으면, 법원 등 관련 기관과 부서에 서류 제출까지 나비로가 진행합니다.',
   '금융 기관과 협력하면, 각종 수수료와 인지대 납부도 처리합니다.',
   '분쟁이 발생하면, 법원의 예상 판결문을 상당한 신뢰도로 생성하므로, 불필요한 소송 남발을 막습니다.',
-  'L모사 등 여타 법률 AI 서비스가 제공하는 모든 기능을 제공하고, 이들이 결코 제공할 수 없는 기능을 제공합니다.',
-  '의뢰인이 직접 작성하고, 변호사·법무사가 승인하는 구조이며, 의뢰인은 이름·주소 등을 일일이 입력할 필요가 없습니다.',
-  '의뢰인이나 사무 직원이 어떤 서류를 작성하다 막히면, AI 비서가 친절히 안내나 설명해 줍니다(관제탑 원칙).',
 ];
 
-test('특징 패널: 홈·서류 목록에만 있고, 일곱 줄과 "관제탑 원칙" 단추가 있으며 작성 화면에는 없다', () => {
+test('배너: 홈·서류 목록에만 "나비로의 특징" 네 줄이 있고, 작성 화면에는 없다', () => {
   for (const p of ['index.html', 'docs.html']) {
     const w = load(p).window, el = w.document.getElementById('promo');
     assert.ok(el, p);
     assert.equal(el.querySelector('h2').textContent, '나비로의 특징');
-    const lis = [...el.querySelectorAll('ol > li')].map((l) => { const c = l.cloneNode(true); const t = c.querySelector('.tower-tip'); if (t) t.remove(); return c.textContent; });
-    assert.deepEqual(lis, PROMO_LINES);
+    assert.deepEqual([...el.querySelectorAll('ol > li')].map((l) => l.textContent), PROMO_LINES);
+    assert.match(el.querySelector('.promo-close').textContent, /다시 보지 않기/);
+    assert.ok(el.querySelector('.promo-close svg'), '닫기 표시(X)');
     assert.match(el.querySelector('.promo-note').textContent, /예상 판결문은 참고용이며 법적 효력이 없습니다/);
-    assert.ok(w.document.getElementById('promoTab'), '옆면 손잡이');
-    assert.ok(el.querySelector('#towerBtn svg'), '화살표');
   }
-  for (const p of ['write.html', '404.html']) { const d = load(p).window.document; assert.equal(d.getElementById('promo'), null, p); assert.equal(d.getElementById('promoTab'), null, p); }
+  for (const p of ['write.html', '404.html']) assert.equal(load(p).window.document.getElementById('promo'), null, p);
 });
 
-test('특징 패널: 손잡이로 밀어 열고 닫으며, 처음 온 사람에게는 저절로 열린다', async () => {
-  const w = load('index.html').window, d = w.document, el = d.getElementById('promo'), tab = d.getElementById('promoTab');
-  assert.ok(!el.classList.contains('open')); assert.equal(el.getAttribute('aria-hidden'), 'true');
-  tab.click(); assert.ok(el.classList.contains('open')); assert.equal(el.getAttribute('aria-hidden'), 'false'); assert.equal(tab.getAttribute('aria-expanded'), 'true');
-  d.getElementById('promoX').click(); assert.ok(!el.classList.contains('open'));
-  tab.click(); d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); assert.ok(!el.classList.contains('open'), 'Esc 로 닫는다');
-  const f = load('docs.html').window; await new Promise((r) => setTimeout(r, 450));
-  assert.ok(f.document.getElementById('promo').classList.contains('open'), '처음 온 사람에게는 열려 있다');
-  const g = load('docs.html', '', '', { navilaw_promo_v1: 1 }).window; await new Promise((r) => setTimeout(r, 450));
-  assert.ok(!g.document.getElementById('promo').classList.contains('open'), '다시 보지 않기를 누른 사람에게는 저절로 열리지 않는다');
-  assert.ok(g.document.getElementById('promoTab'), '손잡이는 남는다');
-});
-
-test('특징 패널: 다시 보지 않기는 닫고 기억한다', () => {
-  const w = load('index.html').window, d = w.document;
-  d.getElementById('promoTab').click(); d.getElementById('promoClose').click();
-  assert.ok(!d.getElementById('promo').classList.contains('open'));
+test('배너: 다시 보지 않기를 누르면 닫히고 기억하며, 기억한 브라우저에는 다시 나오지 않는다', () => {
+  const w = load('index.html').window;
+  w.document.getElementById('promoClose').click();
+  assert.equal(w.document.getElementById('promo'), null);
+  assert.equal(w.document.querySelector('.promo-wrap'), null, '빈 띠가 남지 않는다');
   assert.equal(w.localStorage.getItem('navilaw_promo_v1'), '1');
+  assert.equal(load('docs.html', '', '', { navilaw_promo_v1: 1 }).window.document.getElementById('promo'), null);
+  assert.equal(load('index.html', '', '', {}).window.document.getElementById('promo') !== null, true, '기억이 없으면 보인다');
 });
 
-test('특징 패널: "관제탑 원칙"을 누르면 쪽지가 나타나고 다시 누르면 접힌다', () => {
-  const w = load('index.html').window, d = w.document, b = d.getElementById('towerBtn'), tip = d.getElementById('towerTip');
-  assert.equal(tip.hidden, true); assert.equal(b.getAttribute('aria-expanded'), 'false'); assert.equal(b.getAttribute('aria-controls'), 'towerTip');
-  b.click(); assert.equal(tip.hidden, false); assert.equal(b.getAttribute('aria-expanded'), 'true');
-  assert.match(tip.textContent, /비행사가 갑자기 사망하여 조종간을 잡게 된 승객에게, 관제탑이 안전한 착륙을 위해 한 번에 하나씩 지시하는 것/);
-  b.click(); assert.equal(tip.hidden, true);
-});
-
-test('특징 패널: 접근성(제목 연결·단추)과 인쇄 숨김', () => {
-  const d = load('index.html').window.document, el = d.getElementById('promo');
+test('배너: 접근성(제목 연결·키보드로 닫기 버튼)과 인쇄 숨김', () => {
+  const w = load('index.html').window, el = w.document.getElementById('promo');
   assert.equal(el.getAttribute('aria-labelledby'), 'promoH');
-  for (const id of ['promoTab', 'promoX', 'promoClose', 'towerBtn']) assert.equal(d.getElementById(id).tagName, 'BUTTON', id);
-  assert.match(read('assets/law.css'), /@media print \{ \.promo, \.promo-tab \{ display: none/);
+  const b = w.document.getElementById('promoClose');
+  assert.equal(b.tagName, 'BUTTON'); assert.ok(b.getAttribute('aria-label'));
+  assert.match(read('assets/law.css'), /@media print \{ \.promo-wrap \{ display: none/);
 });
 
 // ── 발급 서류: 초안이 아니라 발급 안내로 시작한다 ──
@@ -302,28 +281,38 @@ async function openForm(opts = {}) {
 test('scanBlanks/pdvKind: 본인 인적사항만 PDV 대상, 상대방·주민번호는 제외', () => {
   const N = load('write.html').window.NaviLaw, f = N.scanBlanks(FORM.split('~~~markdown')[1]);
   assert.deepEqual(Array.from(f, (x) => x.label), ['신청인 성명', '신청인 주소', '연락처', '상대방 성명', '주민등록번호']);
-  assert.deepEqual(Array.from(f, (x) => x.kind), ['name', 'address', 'phone', null, null]);
+  assert.deepEqual(Array.from(f, (x) => x.kind), ['name', 'address', 'phone', null, 'rrn']);
   assert.equal(f[4].sensitive, true);
   assert.equal(N.pdvKind('피고 주소', ''), null); assert.equal(N.pdvKind('부동산 소재지', '주소'), null);
 });
-test('작성 화면: 빈 칸은 입력 칸으로 나오고, 앞머리 표는 숨고, 입력값이 내려받기에 들어간다', async () => {
+test('작성 화면: 빈 칸은 입력 칸으로 나오고, 비서 없이 열면 시험용 의뢰인(PDV) 정보가 자동으로 들어가며, 내려받기에 반영된다', async () => {
   const { w } = await openForm(); const d = w.document;
   const inputs = d.querySelectorAll('#draft input.fld');
   assert.equal(inputs.length, 5);
   assert.doesNotMatch(d.getElementById('draft').textContent, /doc_type|\[확인 필요/);
-  assert.match(d.getElementById('fillSum').textContent, /5개 중 0개/);
-  inputs[0].value = '홍길동'; inputs[0].dispatchEvent(new w.Event('input', { bubbles: true }));
-  inputs[4].value = '900101-1234567'; inputs[4].dispatchEvent(new w.Event('input', { bubbles: true }));
-  assert.match(d.getElementById('fillSum').textContent, /5개 중 2개/);
+  assert.deepEqual(Array.from(inputs, (i) => i.value), ['도영민', '제주시 한림읍 금능남로 3', '010-9662-7170', '', '641005-1******']);
+  assert.equal(d.querySelectorAll('#draft .fld-badge').length, 4);
+  assert.match(d.getElementById('fillSum').textContent, /5개 중 4개/);
+  inputs[3].value = '김상대'; inputs[3].dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert.match(d.getElementById('fillSum').textContent, /5개 중 5개/);
   let html = ''; w.Blob = class { constructor(p) { html = p.join(''); } }; w.URL.createObjectURL = () => 'blob:x'; w.URL.revokeObjectURL = () => {};
   d.querySelector('#actions [data-act="download"]').click();
-  assert.match(html, /홍길동/); assert.match(html, /<mark>\[확인 필요: 신청인 주소\]<\/mark>/);
-  const saved = JSON.parse(w.localStorage.getItem('navilaw_write_last'));
+  assert.match(html, /도영민/); assert.match(html, /641005-1\*{6}/); assert.match(html, /김상대/); assert.doesNotMatch(html, /<mark>/);
   await new Promise((r) => setTimeout(r, 500));
   const s2 = JSON.parse(w.localStorage.getItem('navilaw_write_last'));
-  assert.ok(Object.values(s2.vals).includes('홍길동'));
-  assert.ok(!Object.values(s2.vals).includes('900101-1234567'), '주민등록번호는 저장하지 않는다');
-  assert.ok(saved);
+  assert.ok(Object.values(s2.vals).includes('김상대'));
+  assert.ok(!Object.values(s2.vals).includes('641005-1******'), '주민등록번호는 저장하지 않는다');
+});
+test('작성 화면: 안내문(노란 칸)은 화면에 없고, 인사·질문만 오면 묻지 말고 바로 쓰라고 한 번 더 요청한다', async () => {
+  assert.ok(!/AI가 쓴 초안입니다/.test(read('write.html').replace(/<footer[\s\S]*?<\/footer>/, '')));
+  const w = load('write.html', '?persona=lawyer&doc=' + encodeURIComponent('농지취득자격증명신청서')).window; await tick();
+  const { sent, fire } = hook(w); fire({ type: 'expert-embed-ready' }); await tick();
+  assert.equal(sent.length, 1); assert.match(sent[0][0].text, /인사나 질문 없이 지금 바로 초안 전체를 작성/); assert.match(sent[0][0].text, /PDV에서 자동으로/);
+  fire({ type: 'expert-embed-reply', text: '안녕하세요. 초안을 작성해 드릴까요?' }); await tick();
+  assert.equal(sent.length, 2); assert.match(sent[1][0].text, /질문하지 말고 지금 바로/);
+  assert.doesNotMatch(w.document.getElementById('blanksBody').textContent, /드릴까요/);
+  fire({ type: 'expert-embed-reply', text: FORM }); await tick();
+  assert.equal(sent.length, 2); assert.equal(w.document.querySelectorAll('#draft input.fld').length, 5);
 });
 test('작성 화면: 대화창은 떠 있는 아이콘으로 열고 닫는다', async () => {
   const { w } = await openForm(); const d = w.document, fab = d.getElementById('chatFab'), p = d.getElementById('chatPanel');
@@ -358,5 +347,4 @@ test('PDV: 거부하면 직접 입력 안내, 비서 없이 열면 요청도 버
   assert.equal(a.w.document.querySelector('#draft input.fld').value, '');
   const b = await openForm();
   assert.equal(b.w.document.getElementById('pdvBtn').hidden, true);
-  assert.match(b.w.document.getElementById('pdvNote').textContent, /혼디 이용자가 아니면/);
 });
