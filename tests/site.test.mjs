@@ -245,3 +245,26 @@ test('작성 화면: 직접 입력한 서류명이 발급 서류와 같아도 �
   assert.equal(w.document.getElementById('draftTitle').textContent, '발급 안내');
   assert.match(w.document.getElementById('draft').textContent, /정부24에서 발급받습니다/);
 });
+
+test('작성 화면: 내부 처리용 앞머리 표(doc_type·status…)는 화면·내려받기·복사에 없고, 순서는 서식 → 남은 빈 칸 → 내려받기이다', async () => {
+  const w = load('write.html', '?persona=judicial-scrivener&doc=' + encodeURIComponent('근저당권말소등기신청서')).window; await tick();
+  const { fire } = hook(w); fire({ type: 'expert-embed-ready' }); await tick();
+  fire({ type: 'expert-embed-reply', text: DRAFT }); await tick();
+  const d = w.document, draft = d.getElementById('draft');
+  assert.ok(draft.querySelector('h1'), '서식 본문은 그대로 보인다');
+  assert.equal(draft.querySelector('table.meta'), null);
+  assert.doesNotMatch(draft.textContent, /doc_type|status|DRAFT|open_items|generated_by/);
+  assert.equal(d.getElementById('draftTitle').textContent, '근저당권말소등기신청서', '제목은 앞머리에서 읽되 표로는 보이지 않는다');
+  const FOLLOWING = w.Node.DOCUMENT_POSITION_FOLLOWING;
+  assert.ok(draft.compareDocumentPosition(d.getElementById('blanks')) & FOLLOWING, '초안 다음에 빈 칸');
+  assert.ok(d.getElementById('blanks').compareDocumentPosition(d.getElementById('actions')) & FOLLOWING, '빈 칸 다음에 내려받기 버튼');
+  let copied = '', blob = null;
+  Object.defineProperty(w.navigator, 'clipboard', { value: { writeText: (t) => { copied = t; return Promise.resolve(); } }, configurable: true });
+  w.URL.createObjectURL = (b) => { blob = b; return 'blob:x'; }; w.URL.revokeObjectURL = () => {};
+  d.querySelector('#actions [data-act="copy"]').click(); await tick();
+  assert.match(copied, /^# 근저당권말소등기신청서/); assert.doesNotMatch(copied, /doc_type|^---/m, '복사에도 앞머리를 넣지 않는다');
+  d.querySelector('#actions [data-act="download"]').click();
+  const html = await new Promise((res) => { const r = new w.FileReader(); r.onload = () => res(r.result); r.readAsText(blob); });
+  assert.match(html, /<h1>근저당권말소등기신청서<\/h1>/); assert.doesNotMatch(html, /doc_type|class="meta"|DRAFT/);
+  assert.match(html, /<title>근저당권말소등기신청서<\/title>/);
+});

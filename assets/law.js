@@ -236,6 +236,7 @@
     }
     return null;
   }
+  function stripFront(md) { return String(md || '').replace(/^---[ \t]*\n[\s\S]*?\n---[ \t]*(?:\n|$)/, '').replace(/^\s+/, ''); }
   function docTitle(md) { var fm = parseFront(md); if (fm.doc_type) return fm.doc_type; var h = md.match(/^#\s+(.+)$/m); return h ? h[1].trim() : '서류 초안'; }
   function two(n) { return (n < 10 ? '0' : '') + n; }
   function fileName(title, d) { return title.replace(/[\\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') + '_' + d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + '.html'; }
@@ -244,12 +245,7 @@
     var lines = md.replace(/\r/g, '').split('\n'), out = [], i = 0, list = null;
     function closeList() { if (list) { out.push('</' + list + '>'); list = null; } }
     var fm = md.match(/^---\s*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
-    if (fm) {
-      out.push('<table class="meta">');
-      fm[1].split('\n').forEach(function (l) { var k = l.match(/^([A-Za-z_]+):\s*(.*)$/); if (k) out.push('<tr><th>' + esc(k[1]) + '</th><td>' + inlineH(k[2].replace(/^["']|["']$/g, '')) + '</td></tr>'); });
-      out.push('</table>');
-      i = md.slice(0, fm[0].length).split('\n').length - 1;
-    }
+    if (fm) i = md.slice(0, fm[0].length).split('\n').length - 1;   // 앞머리(doc_type·status·generated_by 등 내부 처리용 표)는 사용자에게 보이지 않는다
     for (; i < lines.length; i++) {
       var l = lines[i], m;
       if (/^\s*$/.test(l)) { closeList(); continue; }
@@ -421,7 +417,7 @@
           setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         } else if (act === 'copy') {
           var done = function () { toast('복사했습니다.'); };
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(st.kind === 'issued' ? st.rest : st.md).then(done, function () { toast('복사하지 못했습니다.'); });
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(st.kind === 'issued' ? st.rest : stripFront(st.md)).then(done, function () { toast('복사하지 못했습니다.'); });
           else toast('이 브라우저에서는 복사할 수 없습니다. 내려받기를 이용해 주세요.');
         } else if (act === 'next') send('W-6 작성된 서류를 검증했고 제출 준비를 진행하겠습니다. 승인합니다.');
         else if (act === 'submitted') send('W-7 제출을 직접 마쳤습니다. W-8로 진행해 주세요.');
