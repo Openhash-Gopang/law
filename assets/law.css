@@ -315,3 +315,20 @@ body > .foot { margin-top: auto; }
 
 /* 홈 상단 서류 수 */
 .home-count { margin: 0 0 14px; min-height: 1.7em; text-align: center; color: var(--sub); font-size: 17px; font-weight: 600; }
+
+/* 나비로의 특징 패널 — 흰 배경, 간결·명확·전문적인 스타일 */
+.promo { color: var(--ink); background: #fff; border-left: 1px solid var(--line); box-shadow: -10px 0 30px rgba(15,23,42,.12); padding: 0 24px 28px; }
+.promo-head { position: sticky; top: 0; z-index: 1; margin: 0 -24px 6px; padding: 18px 24px 14px; background: #fff; border-bottom: 2px solid var(--navy); }
+.promo h2 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; color: var(--navy); }
+.promo-x { width: 40px; height: 40px; color: var(--sub); border-color: var(--line); background: #fff; }
+.promo-x:hover { color: var(--ink); background: #f1f5f9; }
+.promo-list { list-style: none; padding: 0; margin: 0; display: block; counter-reset: pf; font-size: 16px; line-height: 1.65; }
+.promo-list > li { position: relative; counter-increment: pf; padding: 14px 0 14px 38px; border-bottom: 1px solid #e5eaf1; }
+.promo-list > li::before { content: counter(pf); position: absolute; left: 0; top: 15px; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 13.5px; font-weight: 700; color: #fff; background: var(--navy); border-radius: 50%; }
+.promo-list li::marker { content: ""; }
+.promo-note { margin: 16px 0 0; font-size: 14px; color: var(--sub); }
+.promo-never { margin-top: 16px; min-height: 40px; color: var(--sub); background: #fff; border-color: var(--line); }
+.promo-never:hover { color: var(--ink); background: #f1f5f9; }
+.tower { color: var(--accent); border-bottom: 1px dashed var(--accent); font-weight: 600; }
+.tower-tip { color: var(--ink); background: #f1f5fb; border: 1px solid #d3deee; border-left: 3px solid var(--navy); border-radius: 4px; box-shadow: none; }
+.promo button:focus-visible { outline-color: var(--navy); }

@@ -527,6 +527,16 @@ test('홈: AI 초안이 오면 같은 화면에 입력 칸으로 펼치고 PDV �
 
 test('홈: 맨 위에 오늘 날짜 기준 작성 가능 서류 수를 보여 준다(발급 서류 제외)', async () => {
   const w = load('index.html', '', '', {}, WITH_ISSUED).window; await tick(); await tick();
-  const el = w.document.getElementById('docCount'), n = WITH_ISSUED.docs.filter((x) => x.p !== 'issued').length, d = new Date();
-  assert.equal(el.textContent, d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 현재, ' + n.toLocaleString('en-US') + '건의 민원 & 법원 서류를 작성합니다.');
+  const el = w.document.getElementById('docCount'), n = WITH_ISSUED.docs.filter((x) => x.p !== 'issued').length, d = new Date(Date.now() + 9 * 3600000);
+  assert.equal(el.textContent, d.getUTCFullYear() + '년 ' + (d.getUTCMonth() + 1) + '월 ' + d.getUTCDate() + '일 현재, ' + n.toLocaleString('en-US') + '건의 민원 & 법원 서류를 작성합니다.');
+});
+
+test('홈: 대표자 성명·주민등록번호·성 명 칸도 의뢰인 PDV 값으로 채운다', () => {
+  const w = load('index.html').window; w.NaviLaw.go = () => {};
+  w.document.getElementById('askInput').value = '소장'; w.document.getElementById('askForm').requestSubmit();
+  const fr = w.document.querySelector('iframe.gen-frame'); Object.defineProperty(fr, 'contentWindow', { value: { postMessage() {} } });
+  const md = '~~~markdown\n---\ndoc_type: 시설신고서\nstatus: DRAFT\nopen_items: 4\n---\n\n# 시설신고서\n\n- 대표자 성명: [확인 필요: 대표자 성명]\n- 대표자 주민등록번호: [확인 필요: 대표자 주민등록번호]\n- 성 명: [확인 필요: 성 명]\n- 상호: [확인 필요: 상호]\n~~~\n';
+  w.dispatchEvent(Object.assign(new w.Event('message'), { data: { type: 'expert-embed-reply', text: md }, origin: 'https://hondi.net', source: fr.contentWindow }));
+  const v = Array.from(w.document.querySelectorAll('#docPrevIn input.fld'), (i) => i.value);
+  assert.deepEqual(v, ['도 영민', '641005-1******', '도 영민', '']);
 });
