@@ -20,7 +20,7 @@ test('서류 DB: data/docs.json 이 서류 목록(scrivener·lawyer.json)에서 
 });
 
 test('서류 DB: 법무사 98 + 변호사 공통 19 + 세부 분야 282 = 399건, 분야 46개, 서류가 아닌 항목 없음', () => {
-  assert.equal(db.docs.length, 399);
+  assert.equal(db.docs.filter((d) => d.p !== 'minwon').length, 399, '법무사 98 + 변호사 19 + 분야 282 (법제처 민원서식은 따로 센다)');
   assert.equal(db.docs.filter((d) => d.p === 'scrivener').length, 98);
   assert.equal(db.docs.filter((d) => d.pid === 'lawyer').length, 19);
   assert.equal(db.fields.length, 46);
