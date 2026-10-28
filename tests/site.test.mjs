@@ -283,6 +283,7 @@ test('scanBlanks/pdvKind: 본인 인적사항만 PDV 대상, 상대방·주민�
   assert.deepEqual(Array.from(f, (x) => x.label), ['신청인 성명', '신청인 주소', '연락처', '상대방 성명', '주민등록번호']);
   assert.deepEqual(Array.from(f, (x) => x.kind), ['name', 'address', 'phone', null, 'rrn']);
   assert.equal(f[4].sensitive, true);
+  assert.equal(N.pdvKind('성명(법인명)', '신청인 성명 또는 법인명'), 'name'); assert.equal(N.pdvKind('주소(소재지)', '신청인 주소'), 'address'); assert.equal(N.pdvKind('취득 농지 소재지', ''), null);
   assert.equal(N.pdvKind('피고 주소', ''), null); assert.equal(N.pdvKind('부동산 소재지', '주소'), null);
 });
 test('작성 화면: 빈 칸은 입력 칸으로 나오고, 비서 없이 열면 시험용 의뢰인(PDV) 정보가 자동으로 들어가며, 내려받기에 반영된다', async () => {
@@ -290,14 +291,14 @@ test('작성 화면: 빈 칸은 입력 칸으로 나오고, 비서 없이 열면
   const inputs = d.querySelectorAll('#draft input.fld');
   assert.equal(inputs.length, 5);
   assert.doesNotMatch(d.getElementById('draft').textContent, /doc_type|\[확인 필요/);
-  assert.deepEqual(Array.from(inputs, (i) => i.value), ['도영민', '제주시 한림읍 금능남로 3', '010-9662-7170', '', '641005-1******']);
+  assert.deepEqual(Array.from(inputs, (i) => i.value), ['도 영민', '제주시 한림읍 금능남로 3', '010-9662-7170', '', '641005-1******']);
   assert.equal(d.querySelectorAll('#draft .fld-badge').length, 4);
   assert.match(d.getElementById('fillSum').textContent, /5개 중 4개/);
   inputs[3].value = '김상대'; inputs[3].dispatchEvent(new w.Event('input', { bubbles: true }));
   assert.match(d.getElementById('fillSum').textContent, /5개 중 5개/);
   let html = ''; w.Blob = class { constructor(p) { html = p.join(''); } }; w.URL.createObjectURL = () => 'blob:x'; w.URL.revokeObjectURL = () => {};
   d.querySelector('#actions [data-act="download"]').click();
-  assert.match(html, /도영민/); assert.match(html, /641005-1\*{6}/); assert.match(html, /김상대/); assert.doesNotMatch(html, /<mark>/);
+  assert.match(html, /도 영민/); assert.match(html, /641005-1\*{6}/); assert.match(html, /김상대/); assert.doesNotMatch(html, /<mark>/);
   await new Promise((r) => setTimeout(r, 500));
   const s2 = JSON.parse(w.localStorage.getItem('navilaw_write_last'));
   assert.ok(Object.values(s2.vals).includes('김상대'));

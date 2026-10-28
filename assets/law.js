@@ -273,7 +273,7 @@
      엔진은 모르는 항목을 [확인 필요: …] 또는 [변호사·법무사 기재: …] 로 남긴다. 이 표시를 찾아 입력 칸으로 바꾸고, 입력한 값은 이 브라우저에서만 서식에 끼워 넣는다(AI 에게 보내지 않는다). */
   var BLANK_RE = /\[(?:확인 필요|[가-힣]{2,6} 기재)\s*[:：]\s*([^\]]*?)\s*\]/g;
   var SENSITIVE_RE = /(주민등록번호|주민번호|외국인등록번호|계좌번호|카드번호|비밀번호|여권번호|운전면허번호)/;
-  var NOT_SELF_RE = /(피신청인|피청구인|피고|피상속인|상대|채무자|채권자|임대인|임차인|매도인|매수인|양도인|양수인|대리인|증인|사망|배우자|자녀|부모|법정|변호사|법무사|세무사|변리사|관할|법원|기관|회사|법인|사업장|사업자|상호|소재지|목적물|부동산|토지|건물|사건|대표|피해자|가해자|제출처)/;
+  var NOT_SELF_RE = /(피신청인|피청구인|피고|피상속인|상대|채무자|채권자|임대인|임차인|매도인|매수인|양도인|양수인|대리인|증인|사망|배우자|자녀|부모|법정|변호사|법무사|세무사|변리사|관할|법원|기관|회사|사업장|사업자|상호|목적물|부동산|토지|농지|임야|건물|사건|대표|피해자|가해자|제출처)/;
   function cleanLabel(s) { return String(s || '').replace(/[*_`#>|]/g, '').replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').replace(/[:：]\s*$/, '').trim(); }
   function blankLabel(line, idx, hint) {
     var bars = [], i, k, m;
@@ -431,7 +431,7 @@
     /* ── 혼디 PDV (의뢰인의 AI 비서에게 요청) ── */
     var AC_ORIGINS = [HONDI, 'https://www.hondi.net'], PDV_NAME = { name: '이름', phone: '연락처', address: '주소', email: '이메일' };
     /* 시험용(시뮬레이션) 의뢰인 — 실제로는 의뢰인의 PDV 에서 가져온다. 비서가 연 창이 아닐 때 이 값으로 채운다. */
-    var SIM_CLIENT = { name: '도영민', address: '제주시 한림읍 금능남로 3', phone: '010-9662-7170', email: 'tensor.city@gmail.com', rrn: '641005-1******' };
+    var SIM_CLIENT = { name: '도 영민', address: '제주시 한림읍 금능남로 3', phone: '010-9662-7170', email: 'tensor.city@gmail.com', rrn: '641005-1******' };
     function simFill() {
       var n = 0;
       pdvWants().forEach(function (f) { var v = SIM_CLIENT[f.kind]; if (v) { st.vals[f.key] = v; st.pdv[f.key] = 1; n++; } });
