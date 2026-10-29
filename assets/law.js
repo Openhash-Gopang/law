@@ -250,6 +250,7 @@
   var NUDGE = function (doc) { return '질문하지 말고 지금 바로 「' + (doc || '요청한 서류') + '」 초안 전체를 ~~~markdown 코드 블록(앞머리 포함)으로 작성해 주세요. 모르는 항목은 [확인 필요: 항목명] 빈 칸으로 두세요.'; };
   /** 빈 칸 자리표(\uE000n\uE001)를 입력 칸으로 바꾼 초안 HTML. 작성 화면과 홈이 같은 모양을 쓴다. */
   function fieldsHtml(md, fields, vals, pdv) {
+    md = String(md).replace(/^# [^\n\[]*\n?/m, '');   // 카드 제목에 이미 서류 이름이 있으므로 본문 첫 제목 줄은 다시 쓰지 않는다
     return mdToHtml(fillBlanks(md, null, 'html')).replace(/\uE000(\d+)\uE001/g, function (all, n) {
       var f = fields[+n]; if (!f) return '';
       var v = (vals && vals[f.key]) || '', isPdv = !!(pdv && pdv[f.key]);
@@ -290,7 +291,8 @@
     });
 
     /* ── 이 화면에서 바로 작성: 엔터를 누르면 페이지를 옮기지 않고, 보이는 서류의 나머지 항목을 AI가 채워 같은 자리에 펼친다. ── */
-    function genFields() { return gen && gen.md ? scanBlanks(gen.md) : []; }
+    function genMd() { return gen ? (gen.md || gen.part || '') : ''; }
+    function genFields() { var m = genMd(); return m ? scanBlanks(m) : []; }
     function genSecret() { var m = {}; genFields().forEach(function (f) { if (f.sensitive) m[f.key] = 1; }); return m; }
     function genSnap() {
       var sec = genSecret(), vals = {}, k; for (k in gen.vals) if (!sec[k]) vals[k] = gen.vals[k];
@@ -303,7 +305,8 @@
     function genSimFill() { genFields().forEach(function (f) { var v = f.kind && SIM_CLIENT[f.kind]; if (v && !gen.vals[f.key]) { gen.vals[f.key] = v; gen.pdv[f.key] = 1; } }); }
     function genSummary() {
       var fs = genFields(), n = fs.filter(function (f) { return gen.vals[f.key]; }).length, el = $('gSum');
-      if (el) el.textContent = '입력할 항목 ' + fs.length + '개 중 ' + n + '개 입력' + (n === fs.length ? ' — 모두 입력했습니다.' : '. 아래 서식의 빈 칸에 바로 쓰시면 됩니다.');
+      if (el && !gen.md) el.textContent = '작성 중입니다. 지금까지 입력할 항목 ' + fs.length + '개 중 ' + n + '개 입력.';
+      else if (el) el.textContent = '입력할 항목 ' + fs.length + '개 중 ' + n + '개 입력' + (n === fs.length ? ' — 모두 입력했습니다.' : '. 아래 서식의 빈 칸에 바로 쓰시면 됩니다.');
     }
     function genFail(msg) {
       prevIn.innerHTML = '<div class="dp-card"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" role="alert">' + esc(msg) + '</p><div class="dp-foot"><button type="button" class="btn" data-go="1">작성 화면에서 하기</button></div></div>';
@@ -319,6 +322,13 @@
       prevIn.innerHTML = '<div class="dp-card dp-draft"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" id="gSum" role="status"></p><div class="draft dp-body">' + fieldsHtml(gen.md, fs, gen.vals, gen.pdv) + '</div>' +
         (restText ? '<details class="dp-rest"><summary>AI의 안내·남은 빈 칸</summary><div class="draft">' + mdToHtml(restText) + '</div></details>' : '') +
         '<div class="dp-foot"><button type="button" class="btn" data-act="download">웹 표준 서식으로 내려받기</button><button type="button" class="btn line" data-act="copy">복사</button><button type="button" class="btn line" data-act="continue">작성 화면에서 이어서 고치기</button><span class="dp-note">의뢰인 정보는 PDV에서 채워졌습니다. 변호사·법무사가 승인합니다.</span></div></div>';
+      genSummary(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
+    }
+    /* 응답이 오는 대로 윗부분부터 그려 나간다(스트리밍). 입력 칸에 글을 쓰는 중이면 그 순간만 건너뛴다. */
+    function genDrawPartial() {
+      var fs = genFields();
+      prevIn.innerHTML = '<div class="dp-card dp-draft"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" id="gSum" role="status"></p><div class="draft dp-body">' + fieldsHtml(gen.part, fs, gen.vals, gen.pdv) + '</div>' +
+        '<div class="dp-sec busy" role="status"><b>AI가 작성하는 중…</b> 위에서부터 차례로 채워집니다.</div></div>';
       genSummary(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
     }
     function fSend(text) {
@@ -346,17 +356,23 @@
     window.addEventListener('message', function (e) {
       if (e.origin !== HONDI || !frame || e.source !== frame.contentWindow || !e.data) return;
       if (e.data.type === 'expert-embed-ready') { fReady = true; while (fQueue.length) fSend(fQueue.shift()); }
+      else if (e.data.type === 'expert-embed-partial' && gen && !gen.md && !gen.failed) {
+        var now = Date.now(), part = partialDoc(e.data.text), ae = document.activeElement;
+        if (!part || part === gen.part || now - (gen.pt || 0) < 150) return;
+        if (ae && ae.classList && ae.classList.contains('fld') && prevIn.contains(ae)) return;
+        gen.pt = now; gen.part = part; gen.title = docTitle(part) || gen.title; genSimFill(); genDrawPartial();
+      }
       else if (e.data.type === 'expert-embed-reply' && gen && !gen.md) {
         var text = String(e.data.text || ''), ex = extractDoc(text);
         if (!ex) { if (!gen.nudged) { gen.nudged = true; fSend(NUDGE(gen.title)); } else { gen.failed = true; genFail('초안을 받지 못했습니다. 작성 화면에서 다시 해 주십시오.'); } return; }
         if (fTimer) { clearTimeout(fTimer); fTimer = null; }
         var m = STATUS_RE.exec(text); gen.w = m ? parseInt(m[1], 10) : 6;
-        gen.md = ex.md; gen.title = docTitle(ex.md) || gen.title; gen.rest = cleanRest(text, ex.raw); gen.at = Date.now();
+        gen.part = ''; gen.md = ex.md; gen.title = docTitle(ex.md) || gen.title; gen.rest = cleanRest(text, ex.raw); gen.at = Date.now();
         genSimFill(); genDraw(); genSave();
       }
     });
     prevIn.addEventListener('input', function (e) {
-      var t = e.target; if (!gen || !gen.md || !t.classList || !t.classList.contains('fld')) return;
+      var t = e.target; if (!gen || !genMd() || !t.classList || !t.classList.contains('fld')) return;
       var fs = genFields(), f = fs[+t.getAttribute('data-i')]; if (!f) return;
       gen.vals[f.key] = t.value; delete gen.pdv[f.key]; t.classList.toggle('done', !!t.value); t.classList.remove('pdv');
       var b = t.nextSibling; if (b && b.classList && b.classList.contains('fld-badge')) b.remove();
@@ -502,6 +518,15 @@
     return fm;
   }
   function isDoc(md) { return /^---[ \t]*\n[\s\S]{0,800}?doc_type:/.test(md.trim()); }
+  /** 아직 끝나지 않은 AI 응답에서 지금까지 쓴 초안 줄만 뽑는다(스트리밍 표시용). 제목(# …) 줄이 나오기 전이면 빈 문자열. */
+  function partialDoc(reply) {
+    var s = String(reply || ''), m = /(^|\n)(~{3,}|`{3,})[ \t]*(?:markdown|md)?[ \t]*\n/.exec(s), body, close;
+    if (!m) return '';
+    body = s.slice(m.index + m[0].length);
+    close = new RegExp('\\n' + m[2].charAt(0) + '{' + m[2].length + ',}[ \\t]*(?:\\n|$)').exec('\n' + body);
+    body = close ? body.slice(0, Math.max(0, close.index)) + '\n' : body.slice(0, body.lastIndexOf('\n') + 1);   // 끝난 줄까지만
+    return /^# /m.test(body) ? body : '';
+  }
   function extractDoc(reply) {
     var re = new RegExp('(^|\\n)(' + BT + '{3,}|~{3,})[ \\t]*(?:markdown|md)?[ \\t]*\\n([\\s\\S]*?)\\n\\2[ \\t]*(?=\\n|$)', 'g'), m;
     while ((m = re.exec(reply))) { if (isDoc(m[3])) return { raw: m[0].replace(/^\n/, ''), md: m[3].trim() + '\n' }; }
