@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var KEY = 'navilaw_theme';
-  var DEFAULT = 'e';
+  var DEFAULT = 'd';
   var THEMES = [
     { id: 'a', name: 'A 글라스', desc: '투명감과 입체감' },
     { id: 'b', name: 'B 머티리얼', desc: 'Material 3 기본형' },
