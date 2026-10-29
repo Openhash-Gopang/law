@@ -332,3 +332,11 @@ body > .foot { margin-top: auto; }
 .tower { color: var(--accent); border-bottom: 1px dashed var(--accent); font-weight: 600; }
 .tower-tip { color: var(--ink); background: #f1f5fb; border: 1px solid #d3deee; border-left: 3px solid var(--navy); border-radius: 4px; box-shadow: none; }
 .promo button:focus-visible { outline-color: var(--navy); }
+
+/* 사용법 패널 */
+.how-tab { background: #fff; color: var(--navy); border: 1px solid var(--navy); border-right: 0; }
+.how-tab:hover { background: #eef3fb; }
+.how-lead { margin: 14px 0 4px; font-size: 16px; line-height: 1.65; color: var(--sub); }
+.how-list > li b { display: block; margin-bottom: 2px; font-size: 16.5px; font-weight: 700; color: var(--navy); }
+.howto[aria-hidden="false"] { z-index: 71; }
+.howto .promo-note { margin-top: 18px; padding: 10px 12px; background: #f1f5fb; border-radius: 4px; color: var(--ink); }
