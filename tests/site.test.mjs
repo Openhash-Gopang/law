@@ -553,3 +553,26 @@ test('홈: 사용법 탭이 특징 위에 있고, 누르면 사용법 패널이 
   d.body.click(); assert.ok(!el.classList.contains('open'));
   tab.click(); d.getElementById('howX').click(); assert.ok(!el.classList.contains('open'));
 });
+
+test('홈: AI 응답이 오는 중에도 윗부분부터 차례로 그리고, 끝나면 단추까지 완성한다', () => {
+  const w = load('index.html').window; w.NaviLaw.go = () => { throw new Error('이동 금지'); };
+  w.document.getElementById('askInput').value = '소장'; w.document.getElementById('askForm').requestSubmit();
+  const fr = w.document.querySelector('iframe.gen-frame'); Object.defineProperty(fr, 'contentWindow', { value: { postMessage() {} } });
+  const fire = (data) => w.dispatchEvent(Object.assign(new w.Event('message'), { data, origin: 'https://hondi.net', source: fr.contentWindow }));
+  const head = '~~~markdown\n---\ndoc_type: 소장\nstatus: DRAFT\nopen_items: 2\n---\n\n# 소장\n\n- 원고 성명: [확인 필요: 성명]\n';
+  fire({ type: 'expert-embed-partial', text: '네.\n\n' + head.slice(0, 40) });
+  assert.equal(w.document.querySelector('#docPrevIn .dp-body'), null, '제목 전에는 그리지 않는다');
+  fire({ type: 'expert-embed-partial', text: head + '- 피고 성명: [확인 필요: 피고 성' });
+  const body = w.document.querySelector('#docPrevIn .dp-body');
+  assert.ok(body, '제목이 나오면 그리기 시작');
+  assert.equal(body.querySelectorAll('input.fld').length, 1, '끝난 줄까지만');
+  assert.equal(body.querySelector('input.fld').value, '도 영민');
+  assert.ok(w.document.querySelector('#docPrevIn .dp-sec.busy'));
+  assert.equal(w.document.querySelectorAll('#docPrevIn h1, #docPrevIn .dp-body h1').length, 0);
+  assert.equal((w.document.getElementById('docPrevIn').textContent.match(/소장/g) || []).length, 1, '서류 제목은 한 번만');
+  assert.equal(w.document.querySelector('#docPrevIn [data-act="download"]'), null);
+  fire({ type: 'expert-embed-reply', text: head + '- 피고 성명: [확인 필요: 피고 성명]\n~~~\n' });
+  assert.equal(w.document.querySelectorAll('#docPrevIn input.fld').length, 2);
+  assert.ok(w.document.querySelector('#docPrevIn [data-act="download"]'));
+  assert.equal(w.document.querySelector('#docPrevIn .dp-sec.busy'), null);
+});
