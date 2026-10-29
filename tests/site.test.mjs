@@ -540,3 +540,14 @@ test('홈: 대표자 성명·주민등록번호·성 명 칸도 의뢰인 PDV �
   const v = Array.from(w.document.querySelectorAll('#docPrevIn input.fld'), (i) => i.value);
   assert.deepEqual(v, ['도 영민', '641005-1******', '도 영민', '']);
 });
+
+test('홈: 사용법 탭이 특징 위에 있고, 누르면 사용법 패널이 열리며 바깥을 누르면 닫힌다', () => {
+  const w = load('index.html').window, d = w.document, tab = d.getElementById('howTab'), el = d.getElementById('howPanel');
+  const tabs = Array.from(d.querySelectorAll('.side-tabs > *'), (x) => x.id);
+  assert.deepEqual(tabs, ['howTab', 'verdictTab', 'promoTab']);
+  assert.ok(!el.classList.contains('open'));
+  tab.click(); assert.ok(el.classList.contains('open')); assert.equal(tab.getAttribute('aria-expanded'), 'true');
+  assert.match(el.textContent, /엔터 키/); assert.match(el.textContent, /추천 서류/);
+  d.body.click(); assert.ok(!el.classList.contains('open'));
+  tab.click(); d.getElementById('howX').click(); assert.ok(!el.classList.contains('open'));
+});

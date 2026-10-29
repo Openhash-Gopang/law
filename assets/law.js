@@ -912,12 +912,27 @@
     if (!seen) setTimeout(function () { setOpen(true, false); }, 350);   // 처음 오신 분께는 한 번 밀어서 보여 드린다
   }
 
+  /* 사용법 패널 — 특징 패널과 같은 방식으로 밀어 넣고 빼며, 한쪽을 열면 다른 쪽은 바깥 클릭 처리로 닫힌다. */
+  function initHowto() {
+    var el = $('howPanel'), tab = $('howTab'), x = $('howX'); if (!el || !tab || !x) return;
+    function setOpen(open, focus) {
+      el.classList.toggle('open', open);
+      el.setAttribute('aria-hidden', open ? 'false' : 'true');
+      tab.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (focus) { try { (open ? x : tab).focus(); } catch (e) { /* 무시 */ } }
+    }
+    tab.addEventListener('click', function (e) { e.stopPropagation(); var p = $('promo'); if (p && p.classList.contains('open')) { p.classList.remove('open'); p.setAttribute('aria-hidden', 'true'); var pt = $('promoTab'); if (pt) pt.setAttribute('aria-expanded', 'false'); } setOpen(true, true); });
+    x.addEventListener('click', function () { setOpen(false, true); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && el.classList.contains('open')) setOpen(false, true); });
+    document.addEventListener('click', function (e) { if (el.classList.contains('open') && !el.contains(e.target) && !tab.contains(e.target)) setOpen(false, false); });
+  }
+
   /* 나만의 AI 비서(hondi.net)가 ?gwp=1&origin=… 로 연 창이면 그 출처를 기억한다 — 이후 다른 쪽으로 이동해도 window.opener 로 비서와 이야기할 수 있다. */
   (function captureAc() {
     try { var o = qs.get('origin') || ''; if (qs.get('gwp') === '1' && (o === HONDI || o === 'https://www.hondi.net')) sessionStorage.setItem('navilaw_ac', o); } catch (e) { /* 무시 */ }
   })();
   var page = document.body.getAttribute('data-page');
-  initPromo(); initChat();
+  initPromo(); initHowto(); initChat();
   if (page === 'home') initHome();
   else if (page === 'docs') initDocs();
   else if (page === 'mydocs') initMyDocs();
