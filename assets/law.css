@@ -294,8 +294,6 @@ body[data-page="home"] .home-min h1 { text-align: center; }
 .my-head { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 12px; padding: 0 16px 6px; font-size: 14.5px; color: var(--sub); }
 @media (max-width: 720px) { .my-head { display: none; } .my-row { grid-template-columns: 1fr; gap: 6px; } }
 
-.verdict-tab { display: block; text-decoration: none; text-align: center; background: var(--accent); }
-.verdict-tab:hover { background: #004a8f; }
 
 /* 홈에서 바로 작성 */
 .gen-frame { position: fixed; left: -9999px; top: 0; width: 600px; height: 400px; border: 0; opacity: 0; pointer-events: none; }

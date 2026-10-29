@@ -472,14 +472,22 @@ test('작성 화면: 초안이 만들어지면 내 서류 목록에 올라가고
   assert.ok(!JSON.stringify(a).includes('641005-1'), '민감 칸 값은 저장하지 않는다');
 });
 
-test('"대법원 판결문 예상" 손잡이: "나비로의 특징" 위에 있고 K-Law 가상 판결문 생성 페이지를 새 창으로 연다', () => {
-  for (const p of ['index.html', 'docs.html', 'mydocs.html']) {
-    const d = load(p).window.document, tabs = Array.from(d.querySelectorAll('.side-tabs > *')), v = d.getElementById('verdictTab');
-    assert.ok(v, p); assert.equal(v.textContent, '대법원 판결문 예상');
-    assert.equal(v.getAttribute('href'), 'https://klaw.hondi.net/virtual-verdict.html');
-    assert.equal(v.getAttribute('target'), '_blank'); assert.match(v.getAttribute('rel'), /noopener/);
-    assert.ok(tabs.indexOf(v) < tabs.indexOf(d.getElementById('promoTab')), p + ': 특징 손잡이보다 위');
+test('머리말: "대법원 판결문 예상" 손잡이는 없고, 오른쪽 위는 K-Law(판결 시뮬레이터) 링크, 나비 아이콘은 나비 플랫폼 링크', () => {
+  for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html', 'settings.html']) {
+    const h = read(p), d = new JSDOM(h).window.document;
+    assert.equal(d.getElementById('verdictTab'), null, p);
+    assert.ok(!/대법원 판결문 예상/.test(h), p);
+    const k = d.querySelector('.head-right .ext');
+    assert.equal(k.textContent, 'K-Law', p);
+    assert.equal(k.getAttribute('href'), 'https://klaw.hondi.net/desktop.html', p);
+    assert.equal(k.getAttribute('target'), '_blank', p); assert.match(k.getAttribute('rel'), /noopener/, p);
+    const n = d.querySelector('.head-in > .navi-ico');
+    assert.equal(n.getAttribute('href'), 'https://hondi.net/desktop.html', p);
+    assert.equal(n.getAttribute('target'), '_blank', p);
+    assert.match(n.getAttribute('aria-label'), /나비/, p);
+    assert.ok(!/나비웹<\/a>\s*<span class="hondi-user-slot"/.test(h), p + ': 머리말에 나비웹 링크가 남아 있지 않다');
   }
+  assert.match(read('assets/themes.css'), /html\[data-theme="d"\] \.navi-ico \{[^}]*navi-icon\.png/);
 });
 
 test('패널 바깥을 누르면 밀어 넣는다: 특징 패널·대화창(홈·작성 화면), 패널 안쪽이나 손잡이를 누를 때는 그대로', async () => {
@@ -544,7 +552,7 @@ test('홈: 대표자 성명·주민등록번호·성 명 칸도 의뢰인 PDV �
 test('홈: 사용법 탭이 특징 위에 있고, 누르면 사용법 패널이 열리며 바깥을 누르면 닫힌다', () => {
   const w = load('index.html').window, d = w.document, tab = d.getElementById('howTab'), el = d.getElementById('howPanel');
   const tabs = Array.from(d.querySelectorAll('.side-tabs > *'), (x) => x.id);
-  assert.deepEqual(tabs, ['howTab', 'verdictTab', 'promoTab']);
+  assert.deepEqual(tabs, ['howTab', 'promoTab']);
   assert.ok(!el.classList.contains('open'));
   tab.click(); assert.ok(el.classList.contains('open')); assert.equal(tab.getAttribute('aria-expanded'), 'true');
   assert.match(el.textContent, /엔터 키/); assert.match(el.textContent, /추천 서류/);
@@ -637,8 +645,12 @@ test('화면 테마: 다섯 페이지가 themes.css·theme.js를 불러오고, �
   assert.match(css, /Pretendard/);
   assert.ok(!/#f2b705|#fde68a|#fef3c7|#dcfce7|#fee2e2|#c62828|#1b6b3a/i.test(css), '노랑·초록·빨강 계통을 쓰지 않는다');
   assert.ok(!/어떤 서류가 필요하세요|어떤 서류를 쓸까요/.test(css), 'C·E안에는 큰 제목 문구를 두지 않는다');
-  assert.match(css, /html\[data-theme="d"\] \.brand \{[^}]*navi-icon\.png/, 'D안 왼쪽 위는 나비 아이콘');
+  assert.match(css, /\.acts \.btn\.sm[^}]*min-height: 34px[^}]*box-shadow: none/, '목록의 열기·삭제 단추는 작고 부드럽게');
+  assert.match(css, /html\[data-theme="d"\] \.navi-ico \{[^}]*navi-icon\.png/, 'D안 왼쪽 위는 나비 아이콘');
   assert.match(css, /html\[data-theme="d"\] \.nav a \{[^}]*font-size: 18px/, 'D안 왼쪽 메뉴는 본문 글자 크기');
+  assert.match(css, /html\[data-theme="d"\] \.head \{[^}]*width: 72px/, 'D안 레일은 아이콘 폭으로 닫혀 있다');
+  assert.match(css, /html\[data-theme="d"\] \.head:hover[^{]*\{[^}]*width: 224px/, '마우스를 올리면 메뉴 패널이 펼쳐진다');
+  assert.match(css, /\.nav a::before \{[^}]*mask/, '메뉴는 아이콘으로 표시');
   assert.ok(readFileSync(join(ROOT, 'assets/navi-icon.png')).subarray(1, 4).toString() === 'PNG');
   assert.match(css, /\.ask > \.btn\[type="submit"\][^}]*position: absolute; right: 8px/, '초안 작성 단추는 입력 칸 오른쪽 끝의 작은 아이콘');
 });
@@ -650,16 +662,16 @@ function themeDom(url = 'https://law.hondi.net/index.html', store = {}) {
   return dom;
 }
 
-test('화면 테마: 처음엔 E, 저장된 선택과 ?theme= 값을 따른다', () => {
-  assert.equal(themeDom().window.document.documentElement.getAttribute('data-theme'), 'e');
+test('화면 테마: 처음엔 D, 저장된 선택과 ?theme= 값을 따른다', () => {
+  assert.equal(themeDom().window.document.documentElement.getAttribute('data-theme'), 'd');
   assert.equal(themeDom(undefined, { navilaw_theme: 'c' }).window.document.documentElement.getAttribute('data-theme'), 'c');
   const q = themeDom('https://law.hondi.net/index.html?theme=b', { navilaw_theme: 'c' });
   assert.equal(q.window.document.documentElement.getAttribute('data-theme'), 'b');
   assert.equal(q.window.localStorage.getItem('navilaw_theme'), 'b');
-  assert.equal(themeDom(undefined, { navilaw_theme: 'zz' }).window.document.documentElement.getAttribute('data-theme'), 'e');
+  assert.equal(themeDom(undefined, { navilaw_theme: 'zz' }).window.document.documentElement.getAttribute('data-theme'), 'd');
 });
 
-test('머리말: 모든 페이지에 "제안"(혼디 제안 게시판, 새 창)과 톱니바퀴 "설정" 단추가 나비웹 앞에 있고, 디자인 단추는 없다', () => {
+test('머리말: 모든 페이지에 "제안"(혼디 제안 게시판, 새 창)과 톱니바퀴 "설정" 단추가 K-Law 앞에 있고, 디자인 단추는 없다', () => {
   for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html', 'settings.html']) {
     const d = new JSDOM(read(p)).window.document;
     const kids = [...d.querySelector('.head-right').children];
@@ -671,7 +683,7 @@ test('머리말: 모든 페이지에 "제안"(혼디 제안 게시판, 새 창)�
     assert.equal(set.getAttribute('href'), 'settings.html', p);
     assert.equal(set.getAttribute('aria-label'), '설정', p);
     assert.ok(set.querySelector('svg'), p + ': 톱니바퀴 아이콘');
-    assert.ok(kids.indexOf(sug) < kids.indexOf(set) && kids.indexOf(set) < kids.indexOf(d.querySelector('.ext')), p + ': 제안 → 설정 → 나비웹');
+    assert.ok(kids.indexOf(sug) < kids.indexOf(set) && kids.indexOf(set) < kids.indexOf(d.querySelector('.ext')), p + ': 제안 → 설정 → K-Law');
     assert.equal(d.getElementById('themeBtn'), null, p);
     assert.equal(set.getAttribute('aria-current') === 'page', p === 'settings.html', p);
   }
