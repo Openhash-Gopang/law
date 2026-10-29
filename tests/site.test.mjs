@@ -637,6 +637,9 @@ test('화면 테마: 다섯 페이지가 themes.css·theme.js를 불러오고, �
   assert.match(css, /Pretendard/);
   assert.ok(!/#f2b705|#fde68a|#fef3c7|#dcfce7|#fee2e2|#c62828|#1b6b3a/i.test(css), '노랑·초록·빨강 계통을 쓰지 않는다');
   assert.ok(!/어떤 서류가 필요하세요|어떤 서류를 쓸까요/.test(css), 'C·E안에는 큰 제목 문구를 두지 않는다');
+  assert.match(css, /html\[data-theme="d"\] \.brand \{[^}]*navi-icon\.png/, 'D안 왼쪽 위는 나비 아이콘');
+  assert.match(css, /html\[data-theme="d"\] \.nav a \{[^}]*font-size: 18px/, 'D안 왼쪽 메뉴는 본문 글자 크기');
+  assert.ok(readFileSync(join(ROOT, 'assets/navi-icon.png')).subarray(1, 4).toString() === 'PNG');
   assert.match(css, /\.ask > \.btn\[type="submit"\][^}]*position: absolute; right: 8px/, '초안 작성 단추는 입력 칸 오른쪽 끝의 작은 아이콘');
 });
 
@@ -674,16 +677,20 @@ test('머리말: 모든 페이지에 "제안"(혼디 제안 게시판, 새 창)�
   }
 });
 
-test('설정: 화면 디자인 A~E를 고르면 바로 적용·저장되고, 현재 선택이 표시된다', async () => {
+test('설정: 화면 디자인 A~E를 고르면 적용·저장되고, 새 디자인이 적용된 메인 화면(./)으로 돌아간다', async () => {
   const dom = themeDom('https://law.hondi.net/settings.html', { navilaw_theme: 'b' });
   const d = dom.window.document;
   await tick();
   const cards = [...d.querySelectorAll('#themeList button[data-theme-id]')];
   assert.equal(cards.length, 5);
   assert.equal(d.querySelector('#themeList [aria-pressed="true"]').getAttribute('data-theme-id'), 'b');
+  let went = 0;
+  dom.window.navilawTheme.goHome = () => { went++; };
   d.querySelector('[data-theme-id="d"]').click();
+  assert.equal(went, 1, '고르면 메인 화면으로 돌아간다');
   assert.equal(d.documentElement.getAttribute('data-theme'), 'd');
   assert.equal(dom.window.localStorage.getItem('navilaw_theme'), 'd');
   assert.equal(d.querySelector('[data-theme-id="d"]').getAttribute('aria-pressed'), 'true');
   assert.equal(d.querySelector('[data-theme-id="b"]').getAttribute('aria-pressed'), 'false');
+  assert.equal(read('assets/theme.js').includes("location.assign('./')"), true);
 });
