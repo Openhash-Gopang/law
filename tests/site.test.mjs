@@ -590,7 +590,7 @@ test('홈: 서류 위·아래의 "제출 결과 예상" 버튼이 검토를 요�
   assert.ok(w.document.querySelector('#docPrevIn .dp-body').compareDocumentPosition(btns[1]) & 4, '하나는 서류 아래');
   const n = sent.length; btns[1].click();
   assert.equal(sent.length, n + 1);
-  assert.match(sent[n].text, /제출 결과를 예상/); assert.match(sent[n].text, /원고 성명: 도 영민/); assert.doesNotMatch(sent[n].text, /주민/);
+  assert.match(sent[n].text, /제출 결과를 예상/); assert.match(sent[n].text, /기준일: \d{4}년 \d+월 \d+일\(한국 표준시\)/); assert.match(sent[n].text, /비어 있는 칸: 1개\(전체 2개\) — 청구 취지/); assert.match(sent[n].text, /승인 예상이든 보정·수정이든 판정마다 법적 근거/); assert.match(sent[n].text, /원고 성명: 도 영민/); assert.doesNotMatch(sent[n].text, /주민/);
   assert.ok(sent[n].text.length < 4000);
   assert.ok(btns[0].disabled && btns[1].disabled, '검토 중에는 눌리지 않는다');
   fire({ type: 'expert-embed-partial', text: '1. 결론: 보정 요청 예상(확신도 7)\n2. 근거: 청구 취지 미기재' });
@@ -601,4 +601,26 @@ test('홈: 서류 위·아래의 "제출 결과 예상" 버튼이 검토를 요�
   assert.ok(box.querySelector('.rv-badge.warn')); assert.doesNotMatch(box.textContent, /REVIEW_RESULT/);
   assert.equal(w.document.querySelector('#docPrevIn .dp-review .dp-sec.busy'), null);
   assert.ok(!btns[0].disabled || !w.document.querySelector('#docPrevIn [data-act="review"]').disabled);
+});
+
+test('홈: 초안에 첨부서류가 있으면 검토 전에 첨부 점검표를 묻고, 체크 상태를 요청문에 담는다', () => {
+  const w = load('index.html').window; w.NaviLaw.go = () => {};
+  w.document.getElementById('askInput').value = '소장'; w.document.getElementById('askForm').requestSubmit();
+  const fr = w.document.querySelector('iframe.gen-frame'), sent = [];
+  Object.defineProperty(fr, 'contentWindow', { value: { postMessage: (m) => sent.push(m) } });
+  const fire = (data) => w.dispatchEvent(Object.assign(new w.Event('message'), { data, origin: 'https://hondi.net', source: fr.contentWindow }));
+  fire({ type: 'expert-embed-ready' });
+  const md = '~~~markdown\n---\ndoc_type: 소장\nstatus: DRAFT\nopen_items: 1\n---\n\n# 소장\n\n- 원고 성명: [확인 필요: 성명]\n\n## 첨부서류\n- 차용증 사본\n- 송금 내역서\n- 주민등록초본\n~~~\n';
+  fire({ type: 'expert-embed-reply', text: md });
+  const n = sent.length; w.document.querySelector('#docPrevIn [data-act="review"]').click();
+  assert.equal(sent.length, n, '점검표를 먼저 보여 준다');
+  const boxes = w.document.querySelectorAll('#rvBox input[data-att]');
+  assert.equal(boxes.length, 3);
+  boxes[0].checked = true; boxes[0].dispatchEvent(new w.Event('change', { bubbles: true }));
+  w.document.querySelector('#rvBox [data-rv="go"]').click();
+  assert.equal(sent.length, n + 1);
+  assert.match(sent[n].text, /준비됨 — 차용증 사본 \/ 아직 없음 — 송금 내역서, 주민등록초본/);
+  fire({ type: 'expert-embed-reply', text: '1. 결론: 보정 요청 예상(확신도 6)\n[REVIEW_RESULT: verdict=보정 요청 예상; confidence=6]' });
+  w.document.querySelector('#docPrevIn [data-act="review"]').click();
+  assert.ok(w.document.querySelector('#rvBox input[data-att]').checked, '이전 체크가 남는다');
 });

@@ -332,13 +332,37 @@
       genSummary(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
     }
     /* ── 제출 결과 예상: 서류가 관련 법령에 따라 승인될지, 보정·수정 요청이 나올지 AI가 법적 결격 사유 중심으로 예상한다(법적 검토 SP 방식). ── */
+    /** 초안의 첨부서류 목록(‘첨부서류’ 제목 아래 목록이나 ‘첨부서류: a, b’ 한 줄)을 뽑는다. */
+    function attachItems() {
+      var lines = stripFront(gen.md).split('\n'), out = [], i, m, j, it;
+      function clean(t) { return String(t).replace(/\[확인 필요:[^\]]*\]/g, '').replace(/[*_`#>|]/g, '').replace(/^\s*(?:[-•]|\d+[.)])\s*/, '').trim(); }
+      for (i = 0; i < lines.length; i++) {
+        if (!/첨부\s*서류|^\W*첨부\W*$/.test(lines[i].replace(/[*_`#>]/g, ''))) continue;
+        m = /(?:첨부\s*서류|첨부)\s*[:：]\s*(.+)$/.exec(lines[i].replace(/[*_`]/g, ''));
+        if (m) clean(m[1]).split(/[,，、·]|\s\/\s/).forEach(function (t) { t = clean(t); if (t && t.length < 60) out.push(t); });
+        for (j = i + 1; j < lines.length && out.length < 12; j++) {
+          it = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/.exec(lines[j]);
+          if (it) { var t = clean(it[1]); if (t && t.length < 60) out.push(t); }
+          else if (lines[j].trim() === '' && out.length) break;
+          else if (/^#{1,6}\s/.test(lines[j])) break;
+        }
+        if (out.length) break;
+      }
+      return out.filter(function (t, k) { return out.indexOf(t) === k; }).slice(0, 12);
+    }
+    function kstDate() { var k = new Date(Date.now() + 9 * 3600000); return k.getUTCFullYear() + '년 ' + (k.getUTCMonth() + 1) + '월 ' + k.getUTCDate() + '일'; }
     function reviewMessage() {
-      var vals = genFields().filter(function (f) { return gen.vals[f.key] && !f.sensitive; }).map(function (f) { return f.label + ': ' + gen.vals[f.key]; }).join('\n').slice(0, 1200);
+      var fs = genFields(), blank = fs.filter(function (f) { return !gen.vals[f.key]; }),
+        vals = fs.filter(function (f) { return gen.vals[f.key] && !f.sensitive; }).map(function (f) { return f.label + ': ' + gen.vals[f.key]; }).join('\n').slice(0, 1000),
+        items = attachItems(), att = gen.att || {}, ready = items.filter(function (t) { return att[t]; }), notYet = items.filter(function (t) { return !att[t]; });
       return '「' + gen.title + '」 초안의 제출 결과를 예상해 주세요. 관련 법령에 따라 제출 기관이 이 서류를 승인(수리)할지, 보정이나 수정을 요청할지 법적 결격 사유 중심으로 검토합니다. 초안을 다시 쓰지 말고 아래 형식으로만, 인사나 질문 없이 답해 주세요.\n' +
         '1. 결론 한 줄: 승인 예상 / 보정 요청 예상 / 수정 필요 / 판단 불가 중 하나와 확신도(1~10)\n' +
-        '2. 근거: 형식 요건 · 실체 요건 · 절차 요건 · 결격 사유 순으로, 문제가 있는 것만\n' +
-        '3. 보정 목록: 표(항목 | 문제 | 근거 법령(확인이 필요하면 표시) | 조치)\n' +
+        '2. 근거: 형식 요건 · 실체 요건 · 절차 요건 · 결격 사유 순으로 쓰되, 승인 예상이든 보정·수정이든 판정마다 법적 근거(법령 이름과 규범 단, 조문은 확실할 때만, 확실치 않으면 "확인 필요")를 반드시 제시하세요. 승인 예상은 충족한 요건마다 그 요건을 정한 근거를 쓰세요.\n' +
+        '3. 보정 목록(문제가 있을 때): 표(항목 | 문제 | 근거 법령 | 조치) — 근거 법령 칸을 비우지 마세요\n' +
         '4. 다음 단계 한 줄\n마지막 줄에 [REVIEW_RESULT: verdict=승인 예상|보정 요청 예상|수정 필요|판단 불가; confidence=숫자] 를 붙여 주세요.' +
+        '\n\n기준일: ' + kstDate() + '(한국 표준시). 기한은 이 날짜로 계산해 기산일·만료일을 밝혀 주세요.' +
+        '\n서식에서 아직 비어 있는 칸: ' + blank.length + '개(전체 ' + fs.length + '개)' + (blank.length ? ' — ' + blank.slice(0, 8).map(function (f) { return f.label; }).join(', ') : '') +
+        (items.length ? '\n첨부서류 준비 상태(이용자 확인): 준비됨 — ' + (ready.join(', ') || '없음') + ' / 아직 없음 — ' + (notYet.join(', ') || '없음') : '') +
         (vals ? '\n\n이용자가 서식에 입력한 값(초안에 반영):\n' + vals : '');
     }
     function parseReview(text) {
@@ -351,6 +375,13 @@
       for (i = 0; i < btns.length; i++) btns[i].disabled = !!(rv && rv.busy);
       if (!box) return;
       if (!rv) { box.hidden = true; box.innerHTML = ''; return; }
+      if (rv.ask) {
+        box.hidden = false;
+        box.innerHTML = '<div class="rv-head"><b>제출 전 확인</b></div><p class="dp-meta">준비해 둔 첨부서류에 체크해 주세요. 체크하지 않은 서류는 “아직 없음”으로 보고 예상합니다.</p><ul class="rv-att">' +
+          rv.ask.map(function (t, k) { return '<li><label><input type="checkbox" data-att="' + k + '"' + (gen.att && gen.att[t] ? ' checked' : '') + '> ' + esc(t) + '</label></li>'; }).join('') +
+          '</ul><button type="button" class="btn" data-rv="go">이 상태로 검토</button>';
+        return;
+      }
       var p = parseReview(rv.text), cls = /^승인/.test(p.verdict) ? 'ok' : /^보정/.test(p.verdict) ? 'warn' : /^수정/.test(p.verdict) ? 'bad' : 'na';
       box.hidden = false;
       box.innerHTML = '<div class="rv-head"><b>제출 결과 예상</b>' + (p.verdict ? '<span class="rv-badge ' + cls + '">' + esc(p.verdict) + (p.conf ? ' · 확신도 ' + esc(p.conf) + '/10' : '') + '</span>' : '') + '</div>' +
@@ -360,6 +391,11 @@
     }
     function startReview() {
       if (!gen || !gen.md || (rv && rv.busy)) return;
+      var items = attachItems();
+      if (items.length && !gen.attAsked) { gen.att = gen.att || {}; rv = { busy: false, ask: items, text: '' }; rvRender(); return; }
+      runReview();
+    }
+    function runReview() {
       rv = { busy: true, text: '', at: 0 }; rvRender();
       var box = $('rvBox'); try { if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* 무시 */ }
       fSend(reviewMessage());
@@ -395,7 +431,7 @@
         var done = e.data.type === 'expert-embed-reply', nowR = Date.now();
         if (!done && nowR - rv.at < 150) return;
         rv.at = nowR; rv.text = String(e.data.text || '');
-        if (done) { rv.busy = false; if (rvTimer) { clearTimeout(rvTimer); rvTimer = null; } }
+        if (done) { rv.busy = false; if (gen) gen.attAsked = false; if (rvTimer) { clearTimeout(rvTimer); rvTimer = null; } }
         rvRender();
       }
       else if (e.data.type === 'expert-embed-partial' && gen && !gen.md && !gen.failed) {
@@ -421,7 +457,12 @@
       Array.prototype.forEach.call(prevIn.querySelectorAll('.fld'), function (o) { if (o !== t && fs[+o.getAttribute('data-i')] === f) { o.value = t.value; o.classList.toggle('done', !!t.value); } });
       genSummary(); if (saveT) clearTimeout(saveT); saveT = setTimeout(function () { gen.at = Date.now(); genSave(); }, 400);
     });
+    prevIn.addEventListener('change', function (e) {
+      var c = e.target; if (!gen || !rv || !rv.ask || !c.getAttribute || c.getAttribute('data-att') === null) return;
+      gen.att = gen.att || {}; gen.att[rv.ask[+c.getAttribute('data-att')]] = !!c.checked;
+    });
     prevIn.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('[data-rv="go"]')) { if (gen && rv && rv.ask) { gen.attAsked = true; runReview(); } return; }
       var b = e.target.closest('button[data-act]'); if (!b || !gen || !gen.md) return;
       if (b.getAttribute('data-act') === 'review') { startReview(); return; }
       var act = b.getAttribute('data-act'), filled = fillBlanks(gen.md, gen.vals, 'text');
