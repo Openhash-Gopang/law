@@ -977,7 +977,6 @@
     document.addEventListener('click', function (e) { if (el.classList.contains('open') && !el.contains(e.target) && !tab.contains(e.target)) setOpen(false, false); });   // 패널 바깥을 누르면 밀어 넣는다
     var tb = $('towerBtn'), tip = $('towerTip');
     if (tb && tip) tb.addEventListener('click', function () { var o = tip.hidden; tip.hidden = !o; tb.setAttribute('aria-expanded', o ? 'true' : 'false'); });
-    if (!seen) setTimeout(function () { setOpen(true, false); }, 350);   // 처음 오신 분께는 한 번 밀어서 보여 드린다
   }
 
   /* 사용법 패널 — 특징 패널과 같은 방식으로 밀어 넣고 빼며, 한쪽을 열면 다른 쪽은 바깥 클릭 처리로 닫힌다. */

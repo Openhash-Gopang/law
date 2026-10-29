@@ -172,17 +172,15 @@ test('특징 패널: 홈·서류 목록에만 있고, 아홉 줄과 "관제탑 �
   for (const p of ['write.html', '404.html']) { const d = load(p).window.document; assert.equal(d.getElementById('promo'), null, p); assert.equal(d.getElementById('promoTab'), null, p); }
 });
 
-test('특징 패널: 손잡이로 밀어 열고 닫으며, 처음 온 사람에게는 저절로 열린다', async () => {
+test('특징 패널: 손잡이로 밀어 열고 닫으며, 처음 온 사람에게도 저절로 열리지 않는다', async () => {
   const w = load('index.html').window, d = w.document, el = d.getElementById('promo'), tab = d.getElementById('promoTab');
   assert.ok(!el.classList.contains('open')); assert.equal(el.getAttribute('aria-hidden'), 'true');
   tab.click(); assert.ok(el.classList.contains('open')); assert.equal(el.getAttribute('aria-hidden'), 'false'); assert.equal(tab.getAttribute('aria-expanded'), 'true');
   d.getElementById('promoX').click(); assert.ok(!el.classList.contains('open'));
   tab.click(); d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' })); assert.ok(!el.classList.contains('open'), 'Esc 로 닫는다');
   const f = load('docs.html').window; await new Promise((r) => setTimeout(r, 450));
-  assert.ok(f.document.getElementById('promo').classList.contains('open'), '처음 온 사람에게는 열려 있다');
-  const g = load('docs.html', '', '', { navilaw_promo_v1: 1 }).window; await new Promise((r) => setTimeout(r, 450));
-  assert.ok(!g.document.getElementById('promo').classList.contains('open'), '다시 보지 않기를 누른 사람에게는 저절로 열리지 않는다');
-  assert.ok(g.document.getElementById('promoTab'), '손잡이는 남는다');
+  assert.ok(!f.document.getElementById('promo').classList.contains('open'), '처음 온 사람에게도 저절로 열리지 않는다');
+  assert.ok(f.document.getElementById('promoTab'), '손잡이는 남는다');
 });
 
 test('특징 패널: 다시 보지 않기는 닫고 기억한다', () => {
@@ -501,7 +499,7 @@ test('패널 바깥을 누르면 밀어 넣는다: 특징 패널·대화창(홈�
 test('바닥글: 보조 도구 고지 문구는 없고 링크만 남는다(고지는 변호사·법무사 등록 시점에)', () => {
   for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html']) {
     const f = read(p).match(/<footer[\s\S]*?<\/footer>/)[0];
-    assert.doesNotMatch(f, /법률 자문이나 대리를 제공하지/, p); assert.match(f, /혼디넷/, p);
+    assert.doesNotMatch(f, /법률 자문이나 대리를 제공하지/, p); assert.match(f, /나비웹/, p);
   }
 });
 
