@@ -624,3 +624,54 @@ test('홈: 초안에 첨부서류가 있으면 검토 전에 첨부 점검표를
   w.document.querySelector('#docPrevIn [data-act="review"]').click();
   assert.ok(w.document.querySelector('#rvBox input[data-att]').checked, '이전 체크가 남는다');
 });
+
+test('화면 테마: 다섯 페이지가 themes.css·theme.js를 불러오고, 흰색·청색 계통만 쓴다', () => {
+  for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html']) {
+    const h = read(p);
+    assert.match(h, /href="\/?assets\/themes\.css"/, p);
+    assert.match(h, /src="\/?assets\/theme\.js"/, p);
+    assert.ok(h.indexOf('assets/law.css') < h.indexOf('assets/themes.css'), p + ': themes.css는 law.css 뒤에');
+  }
+  const css = read('assets/themes.css');
+  for (const t of ['a', 'b', 'c', 'd', 'e']) assert.ok(css.includes('html[data-theme="' + t + '"]'), '테마 ' + t);
+  assert.match(css, /Pretendard/);
+  assert.ok(!/#f2b705|#fde68a|#fef3c7|#dcfce7|#fee2e2|#c62828|#1b6b3a/i.test(css), '노랑·초록·빨강 계통을 쓰지 않는다');
+  assert.ok(!/어떤 서류가 필요하세요/.test(css), 'C안에는 큰 제목 문구를 두지 않는다');
+});
+
+function themeDom(url = 'https://law.hondi.net/index.html', store = {}) {
+  const dom = new JSDOM(read('index.html'), { url, runScripts: 'outside-only' });
+  for (const [k, v] of Object.entries(store)) dom.window.localStorage.setItem(k, v);
+  dom.window.eval(read('assets/theme.js'));
+  return dom;
+}
+
+test('화면 테마: 처음엔 E, 저장된 선택과 ?theme= 값을 따른다', () => {
+  assert.equal(themeDom().window.document.documentElement.getAttribute('data-theme'), 'e');
+  assert.equal(themeDom(undefined, { navilaw_theme: 'c' }).window.document.documentElement.getAttribute('data-theme'), 'c');
+  const q = themeDom('https://law.hondi.net/index.html?theme=b', { navilaw_theme: 'c' });
+  assert.equal(q.window.document.documentElement.getAttribute('data-theme'), 'b');
+  assert.equal(q.window.localStorage.getItem('navilaw_theme'), 'b');
+  assert.equal(themeDom(undefined, { navilaw_theme: 'zz' }).window.document.documentElement.getAttribute('data-theme'), 'e');
+});
+
+test('화면 테마: 머리말의 "디자인" 단추로 A~E 중 고르고, 선택이 저장되며, 바깥을 누르면 닫힌다', async () => {
+  const dom = themeDom();
+  await tick();
+  const d = dom.window.document;
+  const btn = d.getElementById('themeBtn'), pop = d.getElementById('themePop');
+  assert.ok(btn && pop && pop.hidden);
+  assert.equal(pop.querySelectorAll('button[data-theme-id]').length, 5);
+  btn.click();
+  assert.equal(pop.hidden, false);
+  assert.equal(btn.getAttribute('aria-expanded'), 'true');
+  pop.querySelector('[data-theme-id="d"]').click();
+  assert.equal(d.documentElement.getAttribute('data-theme'), 'd');
+  assert.equal(dom.window.localStorage.getItem('navilaw_theme'), 'd');
+  assert.equal(pop.querySelector('[data-theme-id="d"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(pop.querySelector('[data-theme-id="e"]').getAttribute('aria-pressed'), 'false');
+  assert.equal(pop.hidden, true);
+  btn.click();
+  d.body.click();
+  assert.equal(pop.hidden, true);
+});
