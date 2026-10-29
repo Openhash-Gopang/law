@@ -145,13 +145,12 @@ html[data-theme="c"] .dp-tbl td { border-color: #e3ecfb; }
 /* ── D 워크스페이스: 왼쪽 레일 ── */
 html[data-theme="d"] { --bg: #f4f8ff; --field: #f1f6ff; }
 @media (min-width: 900px) {
-  html[data-theme="d"] body { padding-left: 88px; }
-  html[data-theme="d"] .head { position: fixed; left: 0; top: 0; bottom: 0; width: 88px; border: 0; border-right: 1px solid var(--line); }
+  html[data-theme="d"] body { padding-left: 144px; }
+  html[data-theme="d"] .head { position: fixed; left: 0; top: 0; bottom: 0; width: 144px; border: 0; border-right: 1px solid var(--line); }
   html[data-theme="d"] .head-in { height: 100%; max-width: none; padding: 20px 0; flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; gap: 20px; }
-  html[data-theme="d"] .brand { width: 44px; height: 44px; font-size: 0; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: var(--accent); }
-  html[data-theme="d"] .brand::before { content: "나"; font-size: 18px; font-weight: 800; color: #fff; }
-  html[data-theme="d"] .nav { flex: none; flex-direction: column; align-items: center; gap: 12px; }
-  html[data-theme="d"] .nav a { width: 76px; min-height: 0; padding: 8px 0; font-size: 13px; text-align: center; border-bottom: 0; border-radius: 16px; color: var(--sub); }
+  html[data-theme="d"] .brand { width: 52px; height: 52px; font-size: 0; overflow: hidden; border-radius: 16px; background: url("navi-icon.png") center / cover no-repeat; }
+  html[data-theme="d"] .nav { flex: none; flex-direction: column; align-items: center; gap: 8px; }
+  html[data-theme="d"] .nav a { width: 124px; min-height: 0; padding: 10px 0; font-size: 18px; white-space: nowrap; text-align: center; border-bottom: 0; border-radius: 16px; color: var(--sub); }
   html[data-theme="d"] .nav a[aria-current="page"] { color: var(--tonal-ink); font-weight: 700; background: var(--tonal); }
   html[data-theme="d"] .head-right { position: fixed; top: 12px; right: 24px; z-index: 55; margin: 0; }
 }

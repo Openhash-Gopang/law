@@ -43,8 +43,9 @@
       Array.prototype.forEach.call(list.querySelectorAll('button[data-theme-id]'), function (x) {
         x.setAttribute('aria-pressed', x.getAttribute('data-theme-id') === current ? 'true' : 'false');
       });
+      window.navilawTheme.goHome();   // 고르면 새 디자인이 적용된 메인 화면으로 돌아간다
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
-  window.navilawTheme = { themes: THEMES, get: function () { return current; }, set: function (id) { if (valid(id)) { current = id; apply(id); save(id); } } };
+  window.navilawTheme = { goHome: function () { location.assign('./'); }, themes: THEMES, get: function () { return current; }, set: function (id) { if (valid(id)) { current = id; apply(id); save(id); } } };
 })();
