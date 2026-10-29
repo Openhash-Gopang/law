@@ -626,7 +626,7 @@ test('홈: 초안에 첨부서류가 있으면 검토 전에 첨부 점검표를
 });
 
 test('화면 테마: 다섯 페이지가 themes.css·theme.js를 불러오고, 흰색·청색 계통만 쓴다', () => {
-  for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html']) {
+  for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html', 'settings.html']) {
     const h = read(p);
     assert.match(h, /href="\/?assets\/themes\.css"/, p);
     assert.match(h, /src="\/?assets\/theme\.js"/, p);
@@ -636,11 +636,12 @@ test('화면 테마: 다섯 페이지가 themes.css·theme.js를 불러오고, �
   for (const t of ['a', 'b', 'c', 'd', 'e']) assert.ok(css.includes('html[data-theme="' + t + '"]'), '테마 ' + t);
   assert.match(css, /Pretendard/);
   assert.ok(!/#f2b705|#fde68a|#fef3c7|#dcfce7|#fee2e2|#c62828|#1b6b3a/i.test(css), '노랑·초록·빨강 계통을 쓰지 않는다');
-  assert.ok(!/어떤 서류가 필요하세요/.test(css), 'C안에는 큰 제목 문구를 두지 않는다');
+  assert.ok(!/어떤 서류가 필요하세요|어떤 서류를 쓸까요/.test(css), 'C·E안에는 큰 제목 문구를 두지 않는다');
+  assert.match(css, /\.ask > \.btn\[type="submit"\][^}]*position: absolute; right: 8px/, '초안 작성 단추는 입력 칸 오른쪽 끝의 작은 아이콘');
 });
 
 function themeDom(url = 'https://law.hondi.net/index.html', store = {}) {
-  const dom = new JSDOM(read('index.html'), { url, runScripts: 'outside-only' });
+  const dom = new JSDOM(read(/settings\.html/.test(url) ? 'settings.html' : 'index.html'), { url, runScripts: 'outside-only' });
   for (const [k, v] of Object.entries(store)) dom.window.localStorage.setItem(k, v);
   dom.window.eval(read('assets/theme.js'));
   return dom;
@@ -655,23 +656,34 @@ test('화면 테마: 처음엔 E, 저장된 선택과 ?theme= 값을 따른다',
   assert.equal(themeDom(undefined, { navilaw_theme: 'zz' }).window.document.documentElement.getAttribute('data-theme'), 'e');
 });
 
-test('화면 테마: 머리말의 "디자인" 단추로 A~E 중 고르고, 선택이 저장되며, 바깥을 누르면 닫힌다', async () => {
-  const dom = themeDom();
-  await tick();
+test('머리말: 모든 페이지에 "제안"(혼디 제안 게시판, 새 창)과 톱니바퀴 "설정" 단추가 나비웹 앞에 있고, 디자인 단추는 없다', () => {
+  for (const p of ['index.html', 'docs.html', 'mydocs.html', 'write.html', '404.html', 'settings.html']) {
+    const d = new JSDOM(read(p)).window.document;
+    const kids = [...d.querySelector('.head-right').children];
+    const sug = d.getElementById('suggestBtn'), set = d.getElementById('settingsBtn');
+    assert.ok(sug && set, p);
+    assert.equal(sug.getAttribute('href'), 'https://hondi.net/pages/suggest.html', p);
+    assert.equal(sug.getAttribute('target'), '_blank', p);
+    assert.match(sug.textContent, /제안/, p);
+    assert.equal(set.getAttribute('href'), 'settings.html', p);
+    assert.equal(set.getAttribute('aria-label'), '설정', p);
+    assert.ok(set.querySelector('svg'), p + ': 톱니바퀴 아이콘');
+    assert.ok(kids.indexOf(sug) < kids.indexOf(set) && kids.indexOf(set) < kids.indexOf(d.querySelector('.ext')), p + ': 제안 → 설정 → 나비웹');
+    assert.equal(d.getElementById('themeBtn'), null, p);
+    assert.equal(set.getAttribute('aria-current') === 'page', p === 'settings.html', p);
+  }
+});
+
+test('설정: 화면 디자인 A~E를 고르면 바로 적용·저장되고, 현재 선택이 표시된다', async () => {
+  const dom = themeDom('https://law.hondi.net/settings.html', { navilaw_theme: 'b' });
   const d = dom.window.document;
-  const btn = d.getElementById('themeBtn'), pop = d.getElementById('themePop');
-  assert.ok(btn && pop && pop.hidden);
-  assert.equal(pop.querySelectorAll('button[data-theme-id]').length, 5);
-  btn.click();
-  assert.equal(pop.hidden, false);
-  assert.equal(btn.getAttribute('aria-expanded'), 'true');
-  pop.querySelector('[data-theme-id="d"]').click();
+  await tick();
+  const cards = [...d.querySelectorAll('#themeList button[data-theme-id]')];
+  assert.equal(cards.length, 5);
+  assert.equal(d.querySelector('#themeList [aria-pressed="true"]').getAttribute('data-theme-id'), 'b');
+  d.querySelector('[data-theme-id="d"]').click();
   assert.equal(d.documentElement.getAttribute('data-theme'), 'd');
   assert.equal(dom.window.localStorage.getItem('navilaw_theme'), 'd');
-  assert.equal(pop.querySelector('[data-theme-id="d"]').getAttribute('aria-pressed'), 'true');
-  assert.equal(pop.querySelector('[data-theme-id="e"]').getAttribute('aria-pressed'), 'false');
-  assert.equal(pop.hidden, true);
-  btn.click();
-  d.body.click();
-  assert.equal(pop.hidden, true);
+  assert.equal(d.querySelector('[data-theme-id="d"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(d.querySelector('[data-theme-id="b"]').getAttribute('aria-pressed'), 'false');
 });

@@ -1,4 +1,4 @@
-/* 나비로 화면 테마 선택 — <head>에서 먼저 불러 깜빡임 없이 적용하고, 머리말에 '디자인' 선택 단추를 단다. */
+/* 나비로 화면 테마 — <head>에서 먼저 불러 깜빡임 없이 적용하고, 설정 페이지(settings.html)에서 고르게 한다. */
 (function () {
   'use strict';
   var KEY = 'navilaw_theme';
@@ -24,41 +24,26 @@
   var current = load();
   apply(current);
 
+  /* 설정 페이지의 '화면 디자인' 목록 */
   function build() {
-    var slot = document.querySelector('.head-right');
-    if (!slot || document.getElementById('themeBtn')) return;
-    var btn = document.createElement('button');
-    btn.type = 'button'; btn.id = 'themeBtn'; btn.className = 'theme-btn';
-    btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', 'themePop');
-    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 100 18c1.4 0 2-1 1.5-2.2-.5-1.3.2-2.8 1.7-2.8H17a4 4 0 004-4c0-5-4-9-9-9z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>디자인';
-    var pop = document.createElement('ul');
-    pop.id = 'themePop'; pop.className = 'theme-pop'; pop.hidden = true; pop.setAttribute('aria-label', '화면 디자인 선택');
+    var list = document.getElementById('themeList');
+    if (!list || list.firstChild) return;
     THEMES.forEach(function (t) {
-      var li = document.createElement('li');
       var b = document.createElement('button');
-      b.type = 'button'; b.setAttribute('data-theme-id', t.id); b.setAttribute('aria-pressed', t.id === current ? 'true' : 'false');
-      b.innerHTML = '<span class="theme-sw ' + t.id + '" aria-hidden="true"></span><span><b>' + t.name + '</b><small>' + t.desc + '</small></span>';
-      li.appendChild(b); pop.appendChild(li);
+      b.type = 'button'; b.className = 'theme-card'; b.setAttribute('data-theme-id', t.id);
+      b.setAttribute('aria-pressed', t.id === current ? 'true' : 'false');
+      b.innerHTML = '<span class="theme-sw ' + t.id + '" aria-hidden="true"></span><span class="theme-card-t"><b>' + t.name + '</b><small>' + t.desc + '</small></span><span class="theme-card-on" aria-hidden="true">사용 중</span>';
+      list.appendChild(b);
     });
-    slot.insertBefore(pop, slot.firstChild);
-    slot.insertBefore(btn, slot.firstChild);
-
-    function open(on) {
-      pop.hidden = !on; btn.setAttribute('aria-expanded', on ? 'true' : 'false');
-    }
-    btn.addEventListener('click', function (e) { e.stopPropagation(); open(pop.hidden); });
-    pop.addEventListener('click', function (e) {
+    list.addEventListener('click', function (e) {
       var b = e.target.closest ? e.target.closest('button[data-theme-id]') : null;
       if (!b) return;
       current = b.getAttribute('data-theme-id');
       apply(current); save(current);
-      Array.prototype.forEach.call(pop.querySelectorAll('button[data-theme-id]'), function (x) {
+      Array.prototype.forEach.call(list.querySelectorAll('button[data-theme-id]'), function (x) {
         x.setAttribute('aria-pressed', x.getAttribute('data-theme-id') === current ? 'true' : 'false');
       });
-      open(false); btn.focus();
     });
-    document.addEventListener('click', function (e) { if (!pop.hidden && !slot.contains(e.target)) open(false); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !pop.hidden) { open(false); btn.focus(); } });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
   window.navilawTheme = { themes: THEMES, get: function () { return current; }, set: function (id) { if (valid(id)) { current = id; apply(id); save(id); } } };

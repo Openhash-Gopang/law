@@ -21,6 +21,8 @@
       <a href="mydocs.html">내 서류 목록</a>
     </nav>
     <div class="head-right">
+      <a class="head-btn" id="suggestBtn" href="https://hondi.net/pages/suggest.html" target="_blank" rel="noopener" title="기능 개선을 제안합니다 (새 창)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.6 10.8c.4.4.6.9.6 1.4V16h6v-.8c0-.5.2-1 .6-1.4A6 6 0 0012 3z"/></svg>제안</a>
+      <a class="head-btn head-gear" id="settingsBtn" href="settings.html" aria-label="설정" title="설정"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></a>
       <a class="ext" href="https://hondi.net" target="_blank" rel="noopener">나비웹</a>
       <span class="hondi-user-slot" data-hondi-user-slot="light" style="flex:none;display:flex;align-items:center"></span>
     </div>
@@ -76,7 +78,7 @@
       <input type="file" id="attFile" multiple hidden>
       <button type="button" class="ask-ico ask-mic" id="micBtn" aria-label="음성으로 입력" aria-pressed="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
     </div>
-    <button type="submit" class="btn">초안 작성</button>
+    <button type="submit" class="btn" title="입력 완료 — 초안 작성">초안 작성</button>
   </form>
   <ul class="att-list" id="attList" aria-label="첨부한 파일"></ul>
   <div id="sugStatus" class="sr" role="status" aria-live="polite"></div>
