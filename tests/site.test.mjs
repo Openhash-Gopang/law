@@ -576,3 +576,31 @@ test('홈: AI 응답이 오는 중에도 윗부분부터 차례로 그리고, �
   assert.ok(w.document.querySelector('#docPrevIn [data-act="download"]'));
   assert.equal(w.document.querySelector('#docPrevIn .dp-sec.busy'), null);
 });
+
+test('홈: 서류 위·아래의 "제출 결과 예상" 버튼이 검토를 요청하고, 결과(판정 배지·보정 목록)를 서류 위쪽에 보여 준다', () => {
+  const w = load('index.html').window; w.NaviLaw.go = () => {};
+  w.document.getElementById('askInput').value = '소장'; w.document.getElementById('askForm').requestSubmit();
+  const fr = w.document.querySelector('iframe.gen-frame'), sent = [];
+  Object.defineProperty(fr, 'contentWindow', { value: { postMessage: (m) => sent.push(m) } });
+  const fire = (data) => w.dispatchEvent(Object.assign(new w.Event('message'), { data, origin: 'https://hondi.net', source: fr.contentWindow }));
+  fire({ type: 'expert-embed-ready' });
+  const md = '~~~markdown\n---\ndoc_type: 소장\nstatus: DRAFT\nopen_items: 2\n---\n\n# 소장\n\n- 원고 성명: [확인 필요: 성명]\n- 청구 취지: [확인 필요: 청구 취지]\n~~~\n';
+  fire({ type: 'expert-embed-reply', text: md });
+  const btns = w.document.querySelectorAll('#docPrevIn [data-act="review"]');
+  assert.equal(btns.length, 2, '상단·하단');
+  assert.ok(btns[0].compareDocumentPosition(w.document.querySelector('#docPrevIn .dp-body')) & 4, '하나는 서류 위');
+  assert.ok(w.document.querySelector('#docPrevIn .dp-body').compareDocumentPosition(btns[1]) & 4, '하나는 서류 아래');
+  const n = sent.length; btns[1].click();
+  assert.equal(sent.length, n + 1);
+  assert.match(sent[n].text, /제출 결과를 예상/); assert.match(sent[n].text, /원고 성명: 도 영민/); assert.doesNotMatch(sent[n].text, /주민/);
+  assert.ok(sent[n].text.length < 4000);
+  assert.ok(btns[0].disabled && btns[1].disabled, '검토 중에는 눌리지 않는다');
+  fire({ type: 'expert-embed-partial', text: '1. 결론: 보정 요청 예상(확신도 7)\n2. 근거: 청구 취지 미기재' });
+  assert.match(w.document.getElementById('rvBox').textContent, /청구 취지 미기재/);
+  fire({ type: 'expert-embed-reply', text: '1. 결론: 보정 요청 예상(확신도 7)\n\n| 항목 | 문제 |\n|---|---|\n| 청구 취지 | 미기재 |\n\n[REVIEW_RESULT: verdict=보정 요청 예상; confidence=7]' });
+  const box = w.document.getElementById('rvBox');
+  assert.match(box.querySelector('.rv-badge').textContent, /보정 요청 예상 · 확신도 7\/10/);
+  assert.ok(box.querySelector('.rv-badge.warn')); assert.doesNotMatch(box.textContent, /REVIEW_RESULT/);
+  assert.equal(w.document.querySelector('#docPrevIn .dp-review .dp-sec.busy'), null);
+  assert.ok(!btns[0].disabled || !w.document.querySelector('#docPrevIn [data-act="review"]').disabled);
+});

@@ -275,7 +275,7 @@
     var form = $('askForm'), input = $('askInput'), prev = $('docPrev'), prevIn = $('docPrevIn'), db = null, index = null, sig = '', cur = '', timer = null;
     attachSuggest(input, form);
     initAttach(input);
-    var curPid = ENGINE_L, curIssued = false, gen = null, frame = null, fReady = false, fQueue = [], fTimer = null, saveT = null, autoT = null;
+    var curPid = ENGINE_L, curIssued = false, gen = null, frame = null, fReady = false, fQueue = [], fTimer = null, saveT = null, autoT = null, rv = null, rvTimer = null;
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var t = input.value.trim();
@@ -319,10 +319,10 @@
     }
     function genDraw() {
       var fs = genFields(), restText = restOf(gen.rest);
-      prevIn.innerHTML = '<div class="dp-card dp-draft"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" id="gSum" role="status"></p><div class="draft dp-body">' + fieldsHtml(gen.md, fs, gen.vals, gen.pdv) + '</div>' +
+      prevIn.innerHTML = '<div class="dp-card dp-draft"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" id="gSum" role="status"></p><div class="dp-act"><button type="button" class="btn line" data-act="review">제출 결과 예상</button></div><div class="dp-review" id="rvBox" role="status" hidden></div><div class="draft dp-body">' + fieldsHtml(gen.md, fs, gen.vals, gen.pdv) + '</div>' +
         (restText ? '<details class="dp-rest"><summary>AI의 안내·남은 빈 칸</summary><div class="draft">' + mdToHtml(restText) + '</div></details>' : '') +
-        '<div class="dp-foot"><button type="button" class="btn" data-act="download">웹 표준 서식으로 내려받기</button><button type="button" class="btn line" data-act="copy">복사</button><button type="button" class="btn line" data-act="continue">작성 화면에서 이어서 고치기</button><span class="dp-note">의뢰인 정보는 PDV에서 채워졌습니다. 변호사·법무사가 승인합니다.</span></div></div>';
-      genSummary(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
+        '<div class="dp-foot"><button type="button" class="btn" data-act="review">제출 결과 예상</button><button type="button" class="btn line" data-act="download">웹 표준 서식으로 내려받기</button><button type="button" class="btn line" data-act="copy">복사</button><button type="button" class="btn line" data-act="continue">작성 화면에서 이어서 고치기</button><span class="dp-note">의뢰인 정보는 PDV에서 채워졌습니다. 변호사·법무사가 승인합니다.</span></div></div>';
+      genSummary(); rvRender(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
     }
     /* 응답이 오는 대로 윗부분부터 그려 나간다(스트리밍). 입력 칸에 글을 쓰는 중이면 그 순간만 건너뛴다. */
     function genDrawPartial() {
@@ -330,6 +330,41 @@
       prevIn.innerHTML = '<div class="dp-card dp-draft"><h2>' + esc(gen.title) + '</h2><p class="dp-meta" id="gSum" role="status"></p><div class="draft dp-body">' + fieldsHtml(gen.part, fs, gen.vals, gen.pdv) + '</div>' +
         '<div class="dp-sec busy" role="status"><b>AI가 작성하는 중…</b> 위에서부터 차례로 채워집니다.</div></div>';
       genSummary(); prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
+    }
+    /* ── 제출 결과 예상: 서류가 관련 법령에 따라 승인될지, 보정·수정 요청이 나올지 AI가 법적 결격 사유 중심으로 예상한다(법적 검토 SP 방식). ── */
+    function reviewMessage() {
+      var vals = genFields().filter(function (f) { return gen.vals[f.key] && !f.sensitive; }).map(function (f) { return f.label + ': ' + gen.vals[f.key]; }).join('\n').slice(0, 1200);
+      return '「' + gen.title + '」 초안의 제출 결과를 예상해 주세요. 관련 법령에 따라 제출 기관이 이 서류를 승인(수리)할지, 보정이나 수정을 요청할지 법적 결격 사유 중심으로 검토합니다. 초안을 다시 쓰지 말고 아래 형식으로만, 인사나 질문 없이 답해 주세요.\n' +
+        '1. 결론 한 줄: 승인 예상 / 보정 요청 예상 / 수정 필요 / 판단 불가 중 하나와 확신도(1~10)\n' +
+        '2. 근거: 형식 요건 · 실체 요건 · 절차 요건 · 결격 사유 순으로, 문제가 있는 것만\n' +
+        '3. 보정 목록: 표(항목 | 문제 | 근거 법령(확인이 필요하면 표시) | 조치)\n' +
+        '4. 다음 단계 한 줄\n마지막 줄에 [REVIEW_RESULT: verdict=승인 예상|보정 요청 예상|수정 필요|판단 불가; confidence=숫자] 를 붙여 주세요.' +
+        (vals ? '\n\n이용자가 서식에 입력한 값(초안에 반영):\n' + vals : '');
+    }
+    function parseReview(text) {
+      var t = String(text || ''), m = /\[REVIEW_RESULT:([^\]]*)\]/.exec(t), v = m && /verdict=\s*([^;\]]+)/.exec(m[1]), c = m && /confidence=\s*(\d+)/.exec(m[1]);
+      t = cleanRest(t.replace(/\[REVIEW_RESULT:[^\]]*\]?/g, ''), '').replace(/^[ \t]*(?:~{3,}|`{3,})[^\n]*$/gm, '').trim();
+      return { body: t, verdict: v ? v[1].trim() : '', conf: c ? c[1] : '' };
+    }
+    function rvRender() {
+      var box = $('rvBox'), btns = prevIn.querySelectorAll('[data-act="review"]'), i;
+      for (i = 0; i < btns.length; i++) btns[i].disabled = !!(rv && rv.busy);
+      if (!box) return;
+      if (!rv) { box.hidden = true; box.innerHTML = ''; return; }
+      var p = parseReview(rv.text), cls = /^승인/.test(p.verdict) ? 'ok' : /^보정/.test(p.verdict) ? 'warn' : /^수정/.test(p.verdict) ? 'bad' : 'na';
+      box.hidden = false;
+      box.innerHTML = '<div class="rv-head"><b>제출 결과 예상</b>' + (p.verdict ? '<span class="rv-badge ' + cls + '">' + esc(p.verdict) + (p.conf ? ' · 확신도 ' + esc(p.conf) + '/10' : '') + '</span>' : '') + '</div>' +
+        (rv.err ? '<p class="dp-meta" role="alert">' + esc(rv.err) + '</p>' : '') +
+        (p.body ? '<div class="draft">' + mdToHtml(p.body) + '</div>' : '') +
+        (rv.busy ? '<div class="dp-sec busy"><b>관련 법령에 따라 검토하는 중…</b> 형식·실체·절차 요건과 결격 사유를 확인합니다.</div>' : '');
+    }
+    function startReview() {
+      if (!gen || !gen.md || (rv && rv.busy)) return;
+      rv = { busy: true, text: '', at: 0 }; rvRender();
+      var box = $('rvBox'); try { if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* 무시 */ }
+      fSend(reviewMessage());
+      if (rvTimer) clearTimeout(rvTimer);
+      rvTimer = setTimeout(function () { if (rv && rv.busy) { rv.busy = false; rv.err = 'AI와 연결되지 않아 결과를 받지 못했습니다. 잠시 뒤 다시 눌러 주세요.'; rvRender(); } }, 90000);
     }
     function fSend(text) {
       if (fReady) { try { frame.contentWindow.postMessage({ type: 'expert-embed-send', text: text }, HONDI); } catch (e) { genFail('AI에 요청을 보내지 못했습니다.'); } }
@@ -356,6 +391,13 @@
     window.addEventListener('message', function (e) {
       if (e.origin !== HONDI || !frame || e.source !== frame.contentWindow || !e.data) return;
       if (e.data.type === 'expert-embed-ready') { fReady = true; while (fQueue.length) fSend(fQueue.shift()); }
+      else if (rv && rv.busy && (e.data.type === 'expert-embed-partial' || e.data.type === 'expert-embed-reply')) {
+        var done = e.data.type === 'expert-embed-reply', nowR = Date.now();
+        if (!done && nowR - rv.at < 150) return;
+        rv.at = nowR; rv.text = String(e.data.text || '');
+        if (done) { rv.busy = false; if (rvTimer) { clearTimeout(rvTimer); rvTimer = null; } }
+        rvRender();
+      }
       else if (e.data.type === 'expert-embed-partial' && gen && !gen.md && !gen.failed) {
         var now = Date.now(), part = partialDoc(e.data.text), ae = document.activeElement;
         if (!part || part === gen.part || now - (gen.pt || 0) < 150) return;
@@ -381,6 +423,7 @@
     });
     prevIn.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-act]'); if (!b || !gen || !gen.md) return;
+      if (b.getAttribute('data-act') === 'review') { startReview(); return; }
       var act = b.getAttribute('data-act'), filled = fillBlanks(gen.md, gen.vals, 'text');
       if (act === 'download') {
         var blob = new Blob([toWebDoc(gen.title, filled)], { type: 'text/html;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -393,13 +436,13 @@
     /* 서류 미리보기 — 입력하면 곧바로(0.12초 뒤) 입력칸 아래로 펼친다. 서류 목록이 아직 오지 않았어도 입력한 말로 먼저 펼치고, 목록이 오면 맞는 서류로 바꾼다. */
     function showPrev() {
       var q = input.value.trim();
-      if (!q) { prev.classList.remove('open'); prev.setAttribute('aria-hidden', 'true'); sig = ''; gen = null; return; }
+      if (!q) { prev.classList.remove('open'); prev.setAttribute('aria-hidden', 'true'); sig = ''; gen = null; rv = null; return; }
       var hits = index ? window.NaviLawDocs.search(index, q, { limit: 5 }).filter(function (e) { return e.kind !== 'field'; }) : [];
       var top = hits[0] || null, title = top ? top.t : q, issued = db && window.NaviLawDocs.findIssued ? window.NaviLawDocs.findIssued(db, title) : null;
       var key = title + '|' + (issued ? 'i' : '');
       cur = title; curPid = (top && top.pid) || ENGINE_L; curIssued = !!issued;
       if (key !== sig) {
-        sig = key; gen = null;
+        sig = key; gen = null; rv = null;
         if (issued) prevIn.innerHTML = '<div class="dp-card"><h2>' + esc(title) + '</h2><p class="dp-meta">발급받아 첨부하는 서류입니다</p><div class="dp-foot"><button type="button" class="btn" data-go="1">발급 안내 보기</button><span class="dp-note">작성하는 서류가 아니라 발급처·준비물을 안내합니다.</span></div></div>';
         else prevIn.innerHTML = docPreviewHtml(title, top, hits.slice(1, 5).map(function (e) { return e.t; }));
       }
