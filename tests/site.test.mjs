@@ -706,3 +706,15 @@ test('설정: 화면 디자인 A~E를 고르면 적용·저장되고, 새 디자
   assert.equal(d.querySelector('[data-theme-id="b"]').getAttribute('aria-pressed'), 'false');
   assert.equal(read('assets/theme.js').includes("location.assign('./')"), true);
 });
+test('홈: 미리보기가 뜨면 AI 연결을 미리 열고, Enter 즉시 양식 골격을 보여 준다', async () => {
+  const w = load('index.html').window, d = w.document, input = d.getElementById('askInput'), prev = d.getElementById('docPrev');
+  input.value = '농지취'; input.dispatchEvent(new w.Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(d.querySelector('iframe.gen-frame'), '엔터 전에 이미 AI 틀을 불러오기 시작한다');
+  assert.equal(prev.querySelector('.dp-skel'), null);
+  d.getElementById('askForm').requestSubmit();
+  assert.ok(prev.querySelector('.dp-skel'), '엔터 즉시 양식 골격');
+  assert.equal(prev.querySelectorAll('.sk-blk').length, 4);
+  assert.ok(prev.querySelector('.dp-sec.busy'));
+  assert.ok(prev.querySelectorAll('input.fld').length >= 5, '의뢰인 표는 그대로');
+});

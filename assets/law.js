@@ -406,20 +406,30 @@
       if (fReady) { try { frame.contentWindow.postMessage({ type: 'expert-embed-send', text: text }, HONDI); } catch (e) { genFail('AI에 요청을 보내지 못했습니다.'); } }
       else fQueue.push(text);
     }
+    /* AI 연결(보이지 않는 틀)을 미리 열어 둔다 — 서류를 고른 뒤 틀이 불러와지길 기다리지 않도록, 미리보기가 뜨는 즉시 시작한다. */
+    function ensureFrame(pid) {
+      if (frame && frame.getAttribute('data-pid') === pid) return;
+      if (frame) frame.remove();
+      fReady = false; fQueue = [];
+      frame = document.createElement('iframe'); frame.className = 'gen-frame'; frame.setAttribute('data-pid', pid); frame.setAttribute('title', '서류 작성 AI'); frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1;
+      frame.src = HONDI + '/pages/expert-chat.html?persona=' + enc(pid) + '&embed=1&label=' + enc(LABEL);
+      document.body.appendChild(frame);
+    }
+    /* 양식 골격 — AI 초안이 오기 전에도 서류의 뼈대를 곧바로 보여 준다(신청인 표는 위에 이미 있다). */
+    function skeletonHtml() {
+      return '<div class="dp-skel" aria-hidden="true">' + ['신청 취지', '신청 이유', '첨부서류', '작성 일자 · 신청인 서명'].map(function (t) {
+        return '<div class="sk-blk"><div class="sk-h">' + t + '</div><div class="sk-l"></div><div class="sk-l s"></div></div>';
+      }).join('') + '</div>';
+    }
     function startGen(title, pid) {
       var att = takeAttach(), extra = att ? ' 의뢰인이 첨부한 자료: ' + att.names.join(', ') + '.' + (att.text ? '\n\n' + att.text : '') : '';
       gen = { title: title, pid: pid, md: '', rest: '', vals: {}, pdv: {}, w: 1, at: Date.now(), nudged: false, id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
       var sec = prevIn.querySelector('.dp-sec'), card = prevIn.querySelector('.dp-card');
       if (!sec && card) { sec = document.createElement('div'); sec.className = 'dp-sec'; card.appendChild(sec); }
+      if (card && !card.querySelector('.dp-skel') && sec) sec.insertAdjacentHTML('beforebegin', skeletonHtml());
       if (sec) { sec.classList.add('busy'); sec.setAttribute('role', 'status'); sec.innerHTML = '<b>AI가 이 서류의 나머지 항목을 작성하고 있습니다…</b> 신청 취지·이유·첨부서류 등을 채우는 중입니다.'; }
       var btn = prevIn.querySelector('[data-go]'); if (btn) btn.disabled = true;
-      if (!frame || frame.getAttribute('data-pid') !== pid) {
-        if (frame) frame.remove();
-        fReady = false; fQueue = [];
-        frame = document.createElement('iframe'); frame.className = 'gen-frame'; frame.setAttribute('data-pid', pid); frame.setAttribute('title', '서류 작성 AI'); frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1;
-        frame.src = HONDI + '/pages/expert-chat.html?persona=' + enc(pid) + '&embed=1&label=' + enc(LABEL);
-        document.body.appendChild(frame);
-      }
+      ensureFrame(pid);
       fSend(draftStartMessage(title, '', '') + extra);
       if (fTimer) clearTimeout(fTimer);
       fTimer = setTimeout(function () { if (gen && !gen.md && !gen.failed) { gen.failed = true; genFail('AI와 연결되지 않았습니다. 같은 브라우저에서 hondi.net에 로그인했는지 확인하거나 작성 화면에서 해 주십시오.'); } }, 90000);
@@ -488,6 +498,7 @@
         else prevIn.innerHTML = docPreviewHtml(title, top, hits.slice(1, 5).map(function (e) { return e.t; }));
       }
       prev.classList.add('open'); prev.setAttribute('aria-hidden', 'false');
+      if (!issued) ensureFrame(curPid);
       /* 입력한 말이 서류 명칭과 정확히 같으면 확정으로 보고 잠시 뒤 바로 작성을 시작한다(엔터·추천 서류 선택은 즉시). */
       if (autoT) { clearTimeout(autoT); autoT = null; }
       if (top && !issued && !gen && top.t === q) autoT = setTimeout(function () { autoT = null; if (!gen && input.value.trim() === q) form.requestSubmit(); }, 700);
