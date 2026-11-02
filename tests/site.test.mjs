@@ -718,3 +718,20 @@ test('홈: 미리보기가 뜨면 AI 연결을 미리 열고, Enter 즉시 양�
   assert.ok(prev.querySelector('.dp-sec.busy'));
   assert.ok(prev.querySelectorAll('input.fld').length >= 5, '의뢰인 표는 그대로');
 });
+test('홈: 호스트(나비웹)가 보낸 질문은 현재 화면의 서류 SP 로 보내 답을 돌려준다', async () => {
+  const w = load('index.html').window, d = w.document, input = d.getElementById('askInput');
+  input.value = '소유권보존등기신청서'; input.dispatchEvent(new w.Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 300));
+  const fr = d.querySelector('iframe.gen-frame'), sent = [], out = [];
+  Object.defineProperty(fr, 'contentWindow', { value: { postMessage: (m) => sent.push(m) } });
+  Object.defineProperty(w, 'parent', { value: { postMessage: (m, o) => out.push([m, o]) }, configurable: true });
+  const host = w.parent;
+  w.dispatchEvent(new w.MessageEvent('message', { data: { type: 'expert-embed-ready' }, origin: 'https://hondi.net', source: fr.contentWindow }));
+  w.dispatchEvent(new w.MessageEvent('message', { data: { type: 'navi-doc-ask', id: 'a1', text: '지금 작성 중인 서류는?' }, origin: 'https://mail.hondi.net', source: host }));
+  assert.equal(out[0][0].type, 'navi-doc-ask-ack');
+  const q = sent.find((m) => m.type === 'expert-embed-send');
+  assert.match(q.text, /소유권보존등기신청서/); assert.match(q.text, /지금 작성 중인 서류는\?/);
+  w.dispatchEvent(new w.MessageEvent('message', { data: { type: 'expert-embed-reply', text: '소유권보존등기신청서입니다.' }, origin: 'https://hondi.net', source: fr.contentWindow }));
+  const ans = out.find((o) => o[0].type === 'navi-doc-answer');
+  assert.equal(ans[0].id, 'a1'); assert.match(ans[0].text, /소유권보존등기신청서/); assert.equal(ans[1], 'https://mail.hondi.net');
+});

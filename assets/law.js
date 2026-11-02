@@ -434,9 +434,32 @@
       if (fTimer) clearTimeout(fTimer);
       fTimer = setTimeout(function () { if (gen && !gen.md && !gen.failed) { gen.failed = true; genFail('AI와 연결되지 않았습니다. 같은 브라우저에서 hondi.net에 로그인했는지 확인하거나 작성 화면에서 해 주십시오.'); } }, 90000);
     }
+    /* ── 호스트(나비웹 화면)의 혼디 대화창 질문 — 이 화면의 SP(서류 보조 AI)가 현재 화면을 아는 상태로 답한다. ── */
+    var ASK_HOSTS = ['https://mail.hondi.net', 'https://naviweb.kr', 'https://www.naviweb.kr'], ask = null;
+    function askDone(text) {
+      if (!ask) return; var a = ask; ask = null; clearTimeout(a.t);
+      try { window.parent.postMessage({ type: 'navi-doc-answer', id: a.id, text: String(text || '').slice(0, 1800) }, a.origin); } catch (x) {}
+    }
+    function screenContext() {
+      var t = (gen && gen.title) || cur || '', fs = genFields(), empty = fs.filter(function (f) { return !(gen.vals && gen.vals[f.key]); }).length;
+      return t ? '현재 화면: 「' + t + '」 서류' + (gen && genMd() ? ' 초안(빈 칸 ' + empty + '개 남음)' : ' 미리보기') + '.' : '현재 화면: 서류 작성 첫 화면(아직 서류를 고르지 않음).';
+    }
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (!d || d.type !== 'navi-doc-ask' || e.source !== window.parent || ASK_HOSTS.indexOf(e.origin) < 0) return;
+      var id = String(d.id || '').slice(0, 40), text = String(d.text || '').trim().slice(0, 1000);
+      try { e.source.postMessage({ type: 'navi-doc-ask-ack', id: id }, e.origin); } catch (x) {}
+      if (!id || !text) return;
+      ask = { id: id, origin: e.origin, t: setTimeout(function () { askDone('답변이 늦어지고 있습니다. 잠시 뒤 다시 물어봐 주세요.'); }, 60000) };
+      if (gen && !gen.md && !gen.failed) { askDone(screenContext() + ' 지금 AI가 나머지 항목을 작성하는 중이라 끝난 뒤 자세히 답해 드리겠습니다.'); return; }
+      ensureFrame(curPid);
+      fSend('[서류 작성 화면에서 온 질문 — 서류 초안을 새로 쓰지 말고 이 질문에만 짧게(5문장 이내) 답하세요. ' + screenContext() + '] ' + text);
+    });
     window.addEventListener('message', function (e) {
       if (e.origin !== HONDI || !frame || e.source !== frame.contentWindow || !e.data) return;
       if (e.data.type === 'expert-embed-ready') { fReady = true; while (fQueue.length) fSend(fQueue.shift()); }
+      else if (ask && e.data.type === 'expert-embed-partial') { return; }
+      else if (ask && e.data.type === 'expert-embed-reply') { askDone(String(e.data.text || '').replace(new RegExp(STATUS_RE.source, 'g'), '').replace(/\[(?:초안 검토 고지|1차 통로 고지|인간 전문가 상담 권고)\][\s\S]*$/, '').replace(/[*_`#>]/g, '').trim() || '답변을 받지 못했습니다.'); }
       else if (rv && rv.busy && (e.data.type === 'expert-embed-partial' || e.data.type === 'expert-embed-reply')) {
         var done = e.data.type === 'expert-embed-reply', nowR = Date.now();
         if (!done && nowR - rv.at < 150) return;
