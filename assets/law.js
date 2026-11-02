@@ -444,6 +444,18 @@
       var t = (gen && gen.title) || cur || '', fs = genFields(), empty = fs.filter(function (f) { return !(gen.vals && gen.vals[f.key]); }).length;
       return t ? '현재 화면: 「' + t + '」 서류' + (gen && genMd() ? ' 초안(빈 칸 ' + empty + '개 남음)' : ' 미리보기') + '.' : '현재 화면: 서류 작성 첫 화면(아직 서류를 고르지 않음).';
     }
+    /* 지시 이행 — "주소를 제주시 …로 바꿔 줘" 처럼 보이는 입력 칸의 이름과 값이 들어 있는 말은 그 칸을 직접 고친다. 처리했으면 결과 문장, 아니면 ''. */
+    function applyInstruction(text) {
+      var m, best = null, val = '';
+      Array.prototype.forEach.call(prevIn.querySelectorAll('input.fld'), function (inp) {
+        var L = inp.getAttribute('aria-label') || ''; if (!L || (best && L.length <= (best.getAttribute('aria-label') || '').length)) return;
+        var re = new RegExp(L.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(?:을|를|은|는|이|가)?\\s*(.+?)\\s*(?:으로|로)?\\s*(?:바꿔|고쳐|수정|변경|입력해|적어|써\\s?줘|해\\s?줘)');
+        if ((m = re.exec(text)) && m[1].trim()) { best = inp; val = m[1].trim().replace(/^["'“‘「]|["'”’」]$/g, ''); }
+      });
+      if (!best) return '';
+      best.value = val; best.classList.add('done'); best.dispatchEvent(new Event('input', { bubbles: true }));
+      return '「' + best.getAttribute('aria-label') + '」을(를) “' + val + '”(으)로 고쳤습니다.';
+    }
     window.addEventListener('message', function (e) {
       var d = e.data;
       if (!d || d.type !== 'navi-doc-ask' || e.source !== window.parent || ASK_HOSTS.indexOf(e.origin) < 0) return;
@@ -451,6 +463,7 @@
       try { e.source.postMessage({ type: 'navi-doc-ask-ack', id: id }, e.origin); } catch (x) {}
       if (!id || !text) return;
       ask = { id: id, origin: e.origin, t: setTimeout(function () { askDone('답변이 늦어지고 있습니다. 잠시 뒤 다시 물어봐 주세요.'); }, 60000) };
+      var did = applyInstruction(text); if (did) { askDone(did); return; }
       if (gen && !gen.md && !gen.failed) { askDone(screenContext() + ' 지금 AI가 나머지 항목을 작성하는 중이라 끝난 뒤 자세히 답해 드리겠습니다.'); return; }
       ensureFrame(curPid);
       fSend('[서류 작성 화면에서 온 질문 — 서류 초안을 새로 쓰지 말고 이 질문에만 짧게(5문장 이내) 답하세요. ' + screenContext() + '] ' + text);

@@ -735,3 +735,14 @@ test('홈: 호스트(나비웹)가 보낸 질문은 현재 화면의 서류 SP �
   const ans = out.find((o) => o[0].type === 'navi-doc-answer');
   assert.equal(ans[0].id, 'a1'); assert.match(ans[0].text, /소유권보존등기신청서/); assert.equal(ans[1], 'https://mail.hondi.net');
 });
+test('홈: 호스트가 보낸 지시("주소를 …로 바꿔 줘")는 보이는 입력 칸을 고치고 결과를 답한다', async () => {
+  const w = load('index.html').window, d = w.document, input = d.getElementById('askInput');
+  input.value = '소유권보존등기신청서'; input.dispatchEvent(new w.Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 300));
+  const out = [];
+  Object.defineProperty(w, 'parent', { value: { postMessage: (m, o) => out.push(m) }, configurable: true });
+  w.dispatchEvent(new w.MessageEvent('message', { data: { type: 'navi-doc-ask', id: 'b1', text: '주소를 제주시 연동 100으로 바꿔 줘' }, origin: 'https://mail.hondi.net', source: w.parent }));
+  const ans = out.find((m) => m.type === 'navi-doc-answer');
+  assert.ok(ans, '답이 즉시 온다'); assert.match(ans.text, /주소.*제주시 연동 100/);
+  assert.equal(d.querySelector('input[aria-label="주소"]').value, '제주시 연동 100');
+});
