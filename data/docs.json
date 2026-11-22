@@ -294,7 +294,7 @@
 {"t":"행정심판 청구서","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"처분 특정, 청구 취지·이유, 증거"},
 {"t":"행정소송 소장(취소·무효확인)","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"처분, 위법 사유, 원고적격, 제소기간"},
 {"t":"집행정지 신청서","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"회복하기 어려운 손해, 긴급성"},
-{"t":"정보공개 청구서 · 이의신청서","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"대상 정보, 비공개 사유 반박"},
+{"t":"정보공개 청구서 · 이의신청서","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"수신 기관, 청구 정보(문서 이름·기간·범위), 공개·수령 방법 · 비공개 결정 시 이의신청","a":["정보공개 청구","정보 공개 청구서","정보공개청구서 작성"]},
 {"t":"처분 사전통지 의견제출서","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"사실, 의견"},
 {"t":"국가배상 청구서","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"위법 행위, 손해"},
 {"t":"과징금·영업정지 이의 서면","p":"lawyer","pid":"lawyer-administrative","c":"행정법","d":"처분 내용, 재량 주장"},
